@@ -50,6 +50,9 @@ struct MainView: View {
             if model.docID == nil, let d = store.documents.sorted(by: { $0.modified > $1.modified }).first { model.load(d) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .newDocument)) { _ in newDoc() }
+        .onReceive(NotificationCenter.default.publisher(for: .loadDocument)) { n in
+            if let id = n.object as? UUID, let d = store.documents.first(where: { $0.id == id }) { model.load(d) }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .openDocument)) { _ in openFile() }
         .onReceive(NotificationCenter.default.publisher(for: .exportDocument)) { _ in exportFile() }
         .sheet(isPresented: $showGoals) { GoalsSheet(model: model) }

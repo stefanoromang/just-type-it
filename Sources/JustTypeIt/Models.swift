@@ -165,6 +165,9 @@ struct Prefs: Codable {
     var checkHedging = true
     var checkConsistency = true
     var onlineOriginality = false
+    var checkEverywhere = true
+    var launchAtLogin = true
+    var excludedApps: [String] = []
 
     init() {}
 
@@ -183,6 +186,9 @@ struct Prefs: Codable {
         checkHedging = (try? c.decode(Bool.self, forKey: .checkHedging)) ?? def.checkHedging
         checkConsistency = (try? c.decode(Bool.self, forKey: .checkConsistency)) ?? def.checkConsistency
         onlineOriginality = (try? c.decode(Bool.self, forKey: .onlineOriginality)) ?? def.onlineOriginality
+        checkEverywhere = (try? c.decode(Bool.self, forKey: .checkEverywhere)) ?? def.checkEverywhere
+        launchAtLogin = (try? c.decode(Bool.self, forKey: .launchAtLogin)) ?? def.launchAtLogin
+        excludedApps = (try? c.decode([String].self, forKey: .excludedApps)) ?? def.excludedApps
     }
 }
 

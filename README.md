@@ -69,7 +69,11 @@ The checking happens **on your Mac**. It uses Apple's built-in spelling and gram
 - **Humanizer**: makes AI-sounding text read naturally.
 - **Expert Review**: feedback on substance and logic from a domain expert's point of view.
 
-### Works everywhere on your Mac
+### Works everywhere on your Mac (always on)
+- **Checks as you type in every app.** Just Type It runs in the menu bar, starts automatically when you log in, and underlines mistakes right inside the text box you're typing in: Outlook, Apple Mail, Gmail and other websites in Chrome, Safari or Edge, Microsoft Word, Pages, Notes, Messages, Slack, Teams, Notion and more. Click an underline to see the fix and explanation, then apply it in one click without leaving the app. A colored badge in the corner of the text box shows how many suggestions there are.
+- Tone is adjusted per app: emails are checked as neutral/professional, chat apps as casual.
+- Never checks password fields, search and address bars, or Terminal/code editors. Email addresses, links, @mentions and file paths are ignored. Pause it for any app from the menu bar icon.
+- **Google Docs:** Docs draws its text in a way other apps can't read. Turn on *Tools → Accessibility → Turn on screen reader support* in Google Docs, or use ⌃⌥G.
 - **⌃⌥G in any app** (Mail, Slack, Notion, Word, Pages, Google Docs in Chrome or Safari, and others): select text, press the shortcut, fix the suggestions, then click **Replace in app**.
 - **Services menu**: right-click selected text → Services → *Check with Just Type It*.
 - **Documents**: open and export .txt, .md, .rtf and .docx files. Documents are saved automatically, and you can search them.
@@ -99,10 +103,11 @@ Or download this repository and run `zsh install-mac.sh`.
 
 The installer builds the app on your Mac and puts it in `~/Applications`. If Apple's free Command Line Tools aren't installed yet, it starts their installer; run the command again when that finishes.
 
-To use **⌃⌥G in other apps**, allow Just Type It under System Settings → Privacy & Security → **Accessibility**.
+To check text **in other apps**, allow Just Type It under System Settings → Privacy & Security → **Accessibility** (the app asks on first launch). It then runs in the menu bar and starts automatically at login.
 
 ## Privacy
 
+- In other apps: text is read through macOS Accessibility only from the focused text box, checked on your Mac, and never stored or sent anywhere.
 - Spelling and grammar: Apple's on-device `NSSpellChecker` plus the app's own rules.
 - AI features: Apple's on-device Foundation Models (Apple Intelligence).
 - Plagiarism check: only when you click **Check web**. It sends your longest sentences as search queries and downloads the pages it finds. **Offline only** compares just your documents and pasted sources.
@@ -130,7 +135,9 @@ The app is plain Swift and SwiftUI with no third-party dependencies:
 | `Integrity.swift` | Plagiarism check, AI detection, citations |
 | `EditorModel.swift` / `TextEditorView.swift` | Live checking, underlines, click-to-fix |
 | `MainView.swift`, `Panels.swift`, `AIPanels.swift`, `IntegrityPanel.swift` | User interface |
+| `Everywhere.swift` | Always-on checking and underlines inside other apps |
 | `QuickCheck.swift` | ⌃⌥G check in any app |
+| `LoginItem.swift` | Launch at login |
 | `Store.swift` / `SettingsView.swift` | Documents, settings, dictionary, snippets, style guide |
 
 ## Uninstall

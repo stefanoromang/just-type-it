@@ -33,6 +33,10 @@ enum SelfTest {
             print(missing.isEmpty ? "PASS" : "FAIL missing \(missing)", "|", s)
             for f in flat { print("    ", f) }
         }
+        let contact = "E: stefano.roman@buyersedgeplatform.com www.buyersedgeplatform.com @stefanoromang"
+        let contactIssues = RuleEngine.check(contact, options: o)
+        print("contact-line issues:", contactIssues.count, contactIssues.map(\.original))
+        if !contactIssues.isEmpty { fails += 1 }
         let clean = "Thank you for meeting with us yesterday. We reviewed the proposal and agree with most of it. Our team will send the revised budget on Friday, and we look forward to working together. She makes great coffee. He helps the students every morning. The results surprised everyone. Let him know when it starts."
         let cleanIssues = RuleEngine.check(clean, options: o)
         print("clean-text false positives:", cleanIssues.count)

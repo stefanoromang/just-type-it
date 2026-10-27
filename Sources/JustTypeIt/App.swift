@@ -37,11 +37,7 @@ struct JustTypeItApp: App {
         }
 
         MenuBarExtra("Just Type It", systemImage: "character.cursor.ibeam") {
-            Button("Open Just Type It") { AppDelegate.openMain() }
-            Button("Check Selected Text in Any App  ⌃⌥G") { QuickCheck.shared.run() }
-            Divider()
-            Button("About Just Type It") { AppDelegate.showAbout() }
-            Button("Quit") { NSApp.terminate(nil) }.keyboardShortcut("q")
+            MenuBarContent(store: store)
         }
 
         Settings {
@@ -66,8 +62,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ n: Notification) {
         NSApp.servicesProvider = ServiceProvider()
         NSUpdateDynamicServices()
-        MainActor.assumeIsolated { QuickCheck.shared.installHotkey() }
+        MainActor.assumeIsolated {
+            QuickCheck.shared.installHotkey()
+            let p = Store.shared.prefs
+            if p.checkEverywhere { Everywhere.shared.start() }
+            LoginItem.set(p.launchAtLogin)
+            // Started at login: stay in the menu bar, don't open the window.
+            if CommandLine.arguments.contains("--background") || NSAppleEventManager.shared().currentAppleEvent?.paramDescriptor(forKeyword: keyAELaunchedAsLogInItem) != nil {
+                DispatchQueue.main.async { NSApp.windows.filter { $0.title == "Just Type It" }.forEach { $0.close() } }
+            }
+        }
     }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag { AppDelegate.openMain() }
@@ -99,5 +106,43 @@ final class ServiceProvider: NSObject {
     @objc func checkText(_ pboard: NSPasteboard, userData: String, error: AutoreleasingUnsafeMutablePointer<NSString?>) {
         guard let s = pboard.string(forType: .string), !s.isEmpty else { return }
         MainActor.assumeIsolated { QuickCheck.shared.show(text: s, canReplace: false) }
+    }
+}
+
+struct MenuBarContent: View {
+    @ObservedObject var store: Store
+    @ObservedObject var everywhere = Everywhere.shared
+
+    var body: some View {
+        if everywhere.running {
+            if !everywhere.isTrusted {
+                Text("⚠️ Allow Accessibility to check other apps")
+                Button("Open Accessibility Settings…") {
+                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+                }
+            } else {
+                Text("✓ Checking as you type in every app")
+                if !everywhere.currentApp.isEmpty { Text("\(everywhere.currentApp): \(everywhere.issueCount) suggestion\(everywhere.issueCount == 1 ? "" : "s")") }
+            }
+        }
+        Toggle("Check in All Apps", isOn: Binding(get: { store.prefs.checkEverywhere }, set: { v in
+            store.prefs.checkEverywhere = v
+            v ? Everywhere.shared.start() : Everywhere.shared.stop()
+        }))
+        if let app = NSWorkspace.shared.menuBarOwningApplication, let bid = app.bundleIdentifier, bid != Bundle.main.bundleIdentifier {
+            Button(store.prefs.excludedApps.contains(bid) ? "Resume in \(app.localizedName ?? bid)" : "Pause in \(app.localizedName ?? bid)") {
+                if let i = store.prefs.excludedApps.firstIndex(of: bid) { store.prefs.excludedApps.remove(at: i) } else { store.prefs.excludedApps.append(bid) }
+            }
+        }
+        Divider()
+        Button("Open Just Type It") { AppDelegate.openMain() }
+        Button("Check Selected Text  ⌃⌥G") { QuickCheck.shared.run() }
+        Toggle("Launch at Login", isOn: Binding(get: { store.prefs.launchAtLogin }, set: { v in
+            store.prefs.launchAtLogin = v
+            LoginItem.set(v)
+        }))
+        Divider()
+        Button("About Just Type It") { AppDelegate.showAbout() }
+        Button("Quit Just Type It") { NSApp.terminate(nil) }.keyboardShortcut("q")
     }
 }

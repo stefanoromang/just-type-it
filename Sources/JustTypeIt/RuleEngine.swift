@@ -296,7 +296,22 @@ enum RuleEngine {
 
     // MARK: De-duplication
 
+    /// Email addresses, URLs, @mentions, #tags, file paths and code are never checked.
+    static func protectedRanges(_ text: String) -> [NSRange] {
+        let patterns = [
+            "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}",
+            "\\b(?:https?://|www\\.)[^\\s<>\"]+",
+            "\\b[A-Za-z0-9-]+\\.(?:com|org|net|io|ai|co|dev|app|edu|gov|us|uk|ca|de|fr|me|info|biz)(?:/[^\\s]*)?\\b",
+            "(?<![\\w])[@#][A-Za-z0-9_.-]+",
+            "`[^`\\n]+`",
+            "(?:~|\\.{1,2})?/[A-Za-z0-9._/-]+",
+        ]
+        return patterns.flatMap { TextUtil.matches($0, in: text).map(\.range) }
+    }
+
     static func dedupe(_ issues: [Issue], text: String, o: CheckOptions) -> [Issue] {
+        let protected = protectedRanges(text)
+        let issues = issues.filter { i in i.range.length > 40 || !protected.contains { NSIntersectionRange($0, i.range).length > 0 } }
         let priority: [IssueGroup: Int] = [.correctness: 0, .clarity: 1, .delivery: 2, .engagement: 3]
         let sorted = issues.sorted {
             if priority[$0.group]! != priority[$1.group]! { return priority[$0.group]! < priority[$1.group]! }

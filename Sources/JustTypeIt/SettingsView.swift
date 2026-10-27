@@ -96,16 +96,32 @@ struct SettingsView: View {
 
     private var everywhere: some View {
         Form {
-            Section("Use Just Type It in any app") {
-                Text("1. Select text in any app: Mail, Slack, Notion, Word, Pages, Chrome, Safari…")
-                Text("2. Press ⌃⌥G (Control-Option-G).")
-                Text("3. Fix suggestions in the panel and click **Replace in app**.")
-                Text("You can also right-click selected text → Services → **Check with Just Type It**.")
+            Section("Check as you type in every app") {
+                Toggle("Underline mistakes in Outlook, Gmail, Word, Google Docs, Slack, Notes and other apps", isOn: Binding(get: { store.prefs.checkEverywhere }, set: { v in
+                    store.prefs.checkEverywhere = v
+                    v ? Everywhere.shared.start() : Everywhere.shared.stop()
+                }))
+                Toggle("Launch at login (always running in the menu bar)", isOn: Binding(get: { store.prefs.launchAtLogin }, set: { v in
+                    store.prefs.launchAtLogin = v
+                    LoginItem.set(v)
+                }))
+                Text("Click an underline to see the fix. The colored badge in the corner of the text box shows how many suggestions there are.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Paused apps") {
+                if store.prefs.excludedApps.isEmpty { Text("None. Use the menu bar icon → Pause in <app> to turn checking off for one app.").foregroundStyle(.secondary) }
+                ForEach(store.prefs.excludedApps, id: \.self) { b in
+                    HStack { Text(NSWorkspace.shared.urlForApplication(withBundleIdentifier: b)?.deletingPathExtension().lastPathComponent ?? b); Spacer()
+                        Button("Resume") { store.prefs.excludedApps.removeAll { $0 == b } } }
+                }
+            }
+            Section("Also") {
+                Text("Select text in any app and press ⌃⌥G for the full checker in a panel, or right-click → Services → **Check with Just Type It**.")
             }
             Section("Permissions") {
                 HStack {
                     Image(systemName: AXIsProcessTrusted() ? "checkmark.circle.fill" : "exclamationmark.circle").foregroundStyle(AXIsProcessTrusted() ? .green : .orange)
-                    Text("Accessibility (to read and replace selected text)")
+                    Text(AXIsProcessTrusted() ? "Accessibility is allowed" : "Accessibility is needed to read and fix text in other apps")
                     Spacer()
                     Button("Open Settings") {
                         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
