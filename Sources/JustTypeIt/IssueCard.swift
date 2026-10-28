@@ -45,7 +45,7 @@ struct IssueCard: View {
         VStack(alignment: .leading, spacing: 6) {
             if issue.range.length <= 80 {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(issue.original).strikethrough().foregroundStyle(.secondary).lineLimit(3)
+                    Text(issue.original.trimmingCharacters(in: .whitespaces)).strikethrough().foregroundStyle(.secondary).lineLimit(3)
                     Image(systemName: "arrow.right").font(.caption).foregroundStyle(.secondary)
                 }
             }

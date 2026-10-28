@@ -38,6 +38,12 @@ enum RuleEngine {
             if r.resultType == .spelling {
                 if o.dictionary.contains(word.lowercased()) { continue }
                 if word.contains(where: \.isNumber) || word.hasPrefix("http") || word.contains("@") { continue }
+                // Tech names like Node.js, macOS, iPhone, GitHub, camelCase identifiers.
+                let ns = text as NSString
+                let end = NSMaxRange(r.range)
+                let dotted = end + 1 < ns.length && ns.substring(with: NSRange(location: end, length: 1)) == "." && ns.substring(with: NSRange(location: end + 1, length: 1)).first?.isLetter == true
+                let before = r.range.location >= 1 ? ns.substring(with: NSRange(location: r.range.location - 1, length: 1)) : ""
+                if dotted || before == "." || word.dropLast().contains(".") || word.dropFirst().contains(where: \.isUppercase) { continue }
                 let guesses = sc.guesses(forWordRange: r.range, in: text, language: lang, inSpellDocumentWithTag: 0) ?? []
                 let missingApostrophe = guesses.first.map { $0.replacingOccurrences(of: "'", with: "").lowercased() == word.lowercased() } ?? false
                 out.append(Issue(range: r.range, original: word, replacements: Array(guesses.prefix(4)),
@@ -68,15 +74,15 @@ enum RuleEngine {
 
     static func patternRules(_ text: String, _ o: CheckOptions) -> [Issue] {
         var out: [Issue] = []
-        for rule in RuleData.grammar {
+        for rule in RuleData.grammar + GrammarRules.all {
             for m in TextUtil.matches(rule.pattern, in: text, caseInsensitive: rule.caseInsensitive) {
                 let orig = TextUtil.substring(text, m.range)
                 if o.dictionary.contains(orig.lowercased()) { continue }
                 var reps: [String] = []
                 if !rule.replacement.isEmpty, let re = try? NSRegularExpression(pattern: rule.pattern, options: rule.caseInsensitive ? [.caseInsensitive] : []) {
-                    var rep = re.replacementString(for: m, in: text, offset: 0, template: rule.replacement)
+                    var rep = Morph.resolve(re.replacementString(for: m, in: text, offset: 0, template: rule.replacement))
                     rep = TextUtil.matchCase(rep, like: orig)
-                    if rep != orig { reps = [rep] }
+                    if rep != orig { reps = [rep] } else { continue }
                 } else {
                     reps = fallbackFix(rule.kind, orig)
                 }
@@ -116,6 +122,9 @@ enum RuleEngine {
         switch kind {
         case "Punctuation/Apostrophe":
             if let c = contractions[orig.lowercased()] { return [c == "I'm" || c == "I've" ? c : TextUtil.matchCase(c, like: orig)] }
+        case "Grammar/VerbTense" where TextUtil.matches("^(am|is|are) \\w+ing\\b", in: orig).count > 0:
+            let aux = orig.split(separator: " ")[0].lowercased()
+            return [(aux == "is" ? "has been" : "have been") + orig.dropFirst(aux.count)]
         case "Grammar/VerbTense":
             var s = orig
             for (base, past) in pastTense {
@@ -125,6 +134,29 @@ enum RuleEngine {
                 }
             }
             return s == orig ? [] : [s]
+        case "Grammar/SubjectVerbAgreement", "Grammar/CollectiveNoun":
+            let parts = orig.split(separator: " ").map(String.init)
+            guard let last = parts.last else { return [] }
+            let lw = last.lowercased()
+            if let first = parts.first?.lowercased(), first == "me" || first == "my", parts.count >= 4 {
+                // "Me and my brother likes" / "My brother and I likes" → "My brother and I like"
+                let person = first == "me" ? parts[3] : parts[1]
+                let verb = ["likes": "like", "loves": "love", "wants": "want", "needs": "need", "has": "have", "is": "are", "was": "were", "goes": "go", "does": "do"][lw] ?? lw
+                let s = "My \(person) and I \(verb)"
+                return [orig.first?.isUppercase == true ? s : s.prefix(1).lowercased() + s.dropFirst()]
+            }
+            let sing = ["are": "is", "were": "was", "have": "has", "do": "does"]
+            if let r = sing[lw] { return [parts.dropLast().joined(separator: " ") + " " + r] }
+            return []
+        case "Grammar/UncountableNoun":
+            let parts = orig.split(separator: " ").map(String.init)
+            if let f = parts.first?.lowercased(), f == "a" || f == "an" {
+                let rest = parts.dropFirst().joined(separator: " ")
+                return [rest, "some " + rest, "a piece of " + rest].map { TextUtil.matchCase($0, like: orig) }
+            }
+            return []
+        case "Grammar/AdverbAdjective":
+            return [orig.replacingOccurrences(of: "\\bgood$", with: "well", options: .regularExpression)]
         case "Grammar/PronounCase":
             let subj = ["me": "I", "him": "he", "her": "she", "them": "they"]
             let parts = orig.split(separator: " ").map(String.init)
@@ -182,6 +214,34 @@ enum RuleEngine {
             "Compound adjectives before a noun are usually hyphenated.")
         add("(?<=[a-z]) - (?=[a-z])", { _ in " — " }, "Punctuation/Dash", "Dash", "Use an em dash (—) to set off a phrase.", group: .delivery)
 
+        // Common words capitalized in the middle of a sentence ("this email Is our time").
+        let common = "is|are|was|were|the|and|or|but|our|your|their|my|it|this|that|we|you|to|of|for|with|in|on|at|a|an|be|have|has|will|can|please|thank|thanks"
+        for m in TextUtil.matches("(?<=[a-z,] )(" + common.split(separator: "|").map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: "|") + ")\\b", in: text, caseInsensitive: false) {
+            let o = TextUtil.substring(text, m.range)
+            out.append(Issue(range: m.range, original: o, replacements: [o.lowercased()], group: .correctness,
+                             kind: "Grammar/Capitalization", title: "Capitalization",
+                             explanation: "Only capitalize the first word of a sentence and proper nouns."))
+        }
+        // Ordinary words written in all capitals (not acronyms).
+        let shouty: Set<String> = ["DATA", "PLEASE", "THANKS", "IMPORTANT", "URGENT", "VERY", "REALLY", "NOW", "TODAY", "EVERYONE", "ALL", "NEVER", "ALWAYS", "MUST", "NOTE", "FREE", "SOON", "ASAP"]
+        for m in TextUtil.matches("\\b[A-Z]{3,}\\b", in: text, caseInsensitive: false) {
+            let o = TextUtil.substring(text, m.range)
+            guard shouty.contains(o), o != "ASAP" else { continue }
+            // Skip lines written entirely in capitals (headings).
+            let line = (text as NSString).lineRange(for: m.range)
+            let lt = TextUtil.substring(text, line)
+            if lt == lt.uppercased() { continue }
+            out.append(Issue(range: m.range, original: o, replacements: [o.lowercased()], group: .delivery,
+                             kind: "Style/Formatting/AllCaps", title: "All capitals",
+                             explanation: "Words in all capitals read like shouting. Use bold or rephrase for emphasis."))
+        }
+        // Greeting without a comma ("Hi Team" on its own line).
+        for m in TextUtil.matches("(?m)^(Hi|Hello|Hey|Dear|Good morning|Good afternoon|Good evening)( [A-Z][\\w.]*(?: [A-Z][\\w.]*){0,3})?(?=[ \\t]*$)", in: text, caseInsensitive: false) {
+            let o = TextUtil.substring(text, m.range)
+            out.append(Issue(range: m.range, original: o, replacements: [o + ","], group: .correctness,
+                             kind: "Punctuation/GreetingComma", title: "Missing comma",
+                             explanation: "Put a comma after a greeting: “Hi Team,”."))
+        }
         // Sentence capitalization and closing punctuation.
         for s in TextUtil.sentences(text) {
             guard let first = s.text.first(where: { $0.isLetter }) else { continue }
@@ -221,6 +281,12 @@ enum RuleEngine {
                 guard isVerb(verb, in: s.text, at: m.range(at: 2).location), hasVerb(lead) else { continue }
                 if ["if ", "when ", "because ", "although ", "while ", "since ", "after ", "before ", "though ", "unless ", "as "].contains(where: { lead.hasPrefix($0) || lead.contains(" " + $0) }) { continue }
                 if lead.contains(" and ") || lead.contains(" but ") || lead.split(separator: " ").count < 3 { continue }
+                // Introductory phrases ("Running late this morning, I…", "Regardless of the cost, we…") aren't clauses.
+                let clause = lead.components(separatedBy: ", ").last ?? lead
+                let firstWord = clause.split(separator: " ").first.map(String.init) ?? ""
+                let intro: Set<String> = ["in", "on", "at", "by", "for", "with", "without", "after", "before", "during", "despite", "regardless", "irregardless", "according", "unlike", "like", "as", "to", "from", "since", "until", "upon", "of", "thanks", "due", "given", "once", "even", "although", "though", "whether", "having", "being"]
+                if intro.contains(firstWord) || firstWord.hasSuffix("ing") || firstWord.hasSuffix("ly") || firstWord.hasSuffix("ed") { continue }
+                guard TextUtil.matches("\\b(i|you|he|she|it|we|they|this|that|there|[a-z]+s?) (am|is|are|was|were|have|has|had|will|can|could|would|should|did|do|does|[a-z]+ed|[a-z]+s)\\b", in: clause).count > 0 else { continue }
                 let r = NSRange(location: s.range.location + m.range.location, length: 2)
                 let next = TextUtil.substring(s.text, NSRange(location: m.range.location + 2, length: m.range.length - 2))
                 out.append(Issue(range: NSRange(location: r.location, length: m.range.length), original: ", " + next,
@@ -240,7 +306,8 @@ enum RuleEngine {
                                  explanation: "Sentences over 30 words are hard to follow. Try splitting this one."))
             }
             // Fragment: no verb.
-            if words.count >= 2, words.count <= 12, !hasVerb(s.text),
+            let greeting = TextUtil.matches("^(hi|hey|hello|dear|thanks|thank you|cheers|best|regards|sincerely|good (morning|afternoon|evening)|congrats|congratulations|welcome|great job|well done|happy \\w+|ok|okay|yes|no|sure)\\b", in: s.text).count > 0
+            if words.count >= 2, words.count <= 12, !greeting, !s.text.hasSuffix("!"), !hasVerb(s.text),
                !words.dropFirst().contains(where: { let w = $0.lowercased().trimmingCharacters(in: .punctuationCharacters); return w.hasSuffix("ed") || w.hasSuffix("es") || ["is", "are", "was", "were", "has", "had", "am"].contains(w) }), !s.text.hasSuffix(":"), !s.text.hasSuffix("?"),
                !s.text.hasPrefix("-"), !s.text.hasPrefix("•"), s.text.last.map({ ".!".contains($0) }) == true {
                 out.append(Issue(range: s.range, original: s.text, replacements: [], group: .correctness,

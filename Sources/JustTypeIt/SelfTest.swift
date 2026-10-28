@@ -41,10 +41,41 @@ enum SelfTest {
         let cleanIssues = RuleEngine.check(clean, options: o)
         print("clean-text false positives:", cleanIssues.count)
         for i in cleanIssues { print("    FP:", i.original, "→", i.replacements.first ?? "-", "[\(i.title)]") }
+        if let i = CommandLine.arguments.firstIndex(of: "--corpus"), i + 1 < CommandLine.arguments.count,
+           let corpus = try? String(contentsOfFile: CommandLine.arguments[i + 1], encoding: .utf8) {
+            let found = RuleEngine.check(corpus, options: o).filter { $0.group == .correctness || $0.group == .clarity }
+            print("corpus correctness/clarity flags:", found.count)
+            for f in found { print("    CORPUS:", f.original.prefix(60), "→", f.replacements.first ?? "-", "[\(f.title)]") }
+        }
+        if let i = CommandLine.arguments.firstIndex(of: "--errors"), i + 1 < CommandLine.arguments.count,
+           let corpus = try? String(contentsOfFile: CommandLine.arguments[i + 1], encoding: .utf8) {
+            var caught = 0
+            let lines = corpus.split(separator: "\n").map(String.init)
+            for l in lines {
+                let f = RuleEngine.check(l, options: o).filter { $0.group == .correctness }
+                if f.isEmpty { print("    MISSED:", l) } else { caught += 1; print("    caught:", l, "=>", f.map { "\($0.original)→\($0.replacements.first ?? "-")" }.joined(separator: "; ")) }
+            }
+            print("error recall: \(caught)/\(lines.count)")
+        }
+        if let i = CommandLine.arguments.firstIndex(of: "--sample"), i + 1 < CommandLine.arguments.count,
+           let t = try? String(contentsOfFile: CommandLine.arguments[i + 1], encoding: .utf8) {
+            for f in RuleEngine.check(t, options: o) { print("    RULE:", f.original.prefix(50), "→", f.replacements.first ?? "-", "[\(f.title)]") }
+            if CommandLine.arguments.contains("--ai") {
+                let sema = DispatchSemaphore(value: 0)
+                Task { @MainActor in
+                    let rules = RuleEngine.check(t, options: o)
+                    for f in await AIEngine.deepCheck(t, goals: Goals(), dialect: .american, brand: "", existing: rules) {
+                        print("    AI:", f.original.prefix(50), "→", f.replacements.first ?? "-", "[\(f.title)]")
+                    }
+                    sema.signal()
+                }
+                while sema.wait(timeout: .now()) == .timedOut { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
+            }
+        }
         let m = Metrics.compute(Store.welcomeText, issues: RuleEngine.check(Store.welcomeText, options: o))
         print("welcome score:", m.overall, m.groupScores.map { "\($0.key.rawValue)=\($0.value)" }, "tones:", m.tones.map(\.name))
         print("AI available:", AIEngine.available)
-        if CommandLine.arguments.contains("--ai") {
+        if CommandLine.arguments.contains("--ai"), !CommandLine.arguments.contains("--sample") {
             let sema = DispatchSemaphore(value: 0)
             Task { @MainActor in
                 let t = "Me and my friend goes to the libary every weeks. Irregardless, we was always learning alot of new thing."

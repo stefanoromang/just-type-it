@@ -101,6 +101,7 @@ struct SettingsView: View {
                     store.prefs.checkEverywhere = v
                     v ? Everywhere.shared.start() : Everywhere.shared.stop()
                 }))
+                Toggle("AI suggestions in other apps (Apple Intelligence, on-device)", isOn: $store.prefs.aiEverywhere)
                 Toggle("Launch at login (always running in the menu bar)", isOn: Binding(get: { store.prefs.launchAtLogin }, set: { v in
                     store.prefs.launchAtLogin = v
                     LoginItem.set(v)

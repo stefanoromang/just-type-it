@@ -82,15 +82,25 @@ enum AIEngine {
             fixed = fixed.components(separatedBy: "\n").first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? fixed
             fixed = stripQuotes(fixed.trimmingCharacters(in: .whitespaces))
             guard fixed != s.text, similarity(fixed, s.text) > 0.5 else { continue }
-            for d in WordDiff.changes(from: s.text, to: fixed) {
+            // Drop edits that rules already cover, then join nearby edits into one readable suggestion.
+            let raw = WordDiff.changes(from: s.text, to: fixed, merged: false).filter { d in
                 let range = NSRange(location: s.range.location + d.range.location, length: d.range.length)
-                guard range.length > 0 else { continue }
-                if existing.contains(where: { NSIntersectionRange($0.range, range).length > 0 }) { continue }
+                return range.length > 0 && !existing.contains(where: { NSIntersectionRange($0.range, range).length > 0 })
+            }
+            for d in WordDiff.merge(raw, in: s.text) {
+                let range = NSRange(location: s.range.location + d.range.location, length: d.range.length)
                 if issues.contains(where: { NSIntersectionRange($0.range, range).length > 0 }) { continue }
-                let orig = TextUtil.substring(text, range)
+                if existing.contains(where: { NSIntersectionRange($0.range, range).length > 0 }) { continue }
+                var range2 = range
+                // A fix that starts with punctuation attaches to the previous word: "colors and" → "colors,".
+                if let f = d.replacement.first, ",.;:!?".contains(f), range2.location > 0,
+                   TextUtil.substring(text, NSRange(location: range2.location - 1, length: 1)) == " " {
+                    range2 = NSRange(location: range2.location - 1, length: range2.length + 1)
+                }
+                let orig = TextUtil.substring(text, range2)
                 if orig.lowercased() == d.replacement.lowercased(), orig.first?.isUppercase == d.replacement.first?.isUppercase { continue }
-                let (group, title, why) = classify(orig, d.replacement)
-                issues.append(Issue(range: range, original: orig, replacements: [d.replacement], group: group,
+                let (group, title, why) = classify(orig.trimmingCharacters(in: .whitespaces), d.replacement)
+                issues.append(Issue(range: range2, original: orig, replacements: [d.replacement], group: group,
                                     kind: "AI/\(title)", title: title, explanation: why, source: .ai))
             }
         }
@@ -107,10 +117,20 @@ enum AIEngine {
     static func classify(_ o: String, _ r: String) -> (IssueGroup, String, String) {
         let lo = o.lowercased(), lr = r.lowercased()
         let strip: (String) -> String = { $0.filter { $0.isLetter || $0.isNumber || $0 == " " } }
-        if strip(lo) == strip(lr) {
-            return (.correctness, "Punctuation", "Punctuation helps readers follow the sentence: “\(r)” is the correct form here.")
+        if o == r.lowercased() || r == o.lowercased() || lo == lr {
+            if o.count > 1, o == o.uppercased() { return (.correctness, "Capitalization", "Don't write ordinary words in all capitals; it reads like shouting. Use “\(r)”.") }
+            return (.correctness, "Capitalization", r.first?.isUppercase == true ? "Capitalize this word: “\(r)”." : "This word doesn't need a capital letter here: “\(r)”.")
         }
-        if lo == lr { return (.correctness, "Capitalization", "Use “\(r)” with this capitalization.") }
+        if strip(lo) == strip(lr) {
+            if r.contains(",") && !o.contains(",") { return (.correctness, "Missing comma", "Add a comma here to separate items or clauses: “\(r)”.") }
+            if o.contains(",") && !r.contains(",") { return (.correctness, "Unnecessary comma", "This comma isn't needed: “\(r)”.") }
+            if r.contains("-") != o.contains("-") { return (.correctness, "Hyphen", "Use “\(r)” (hyphenation).") }
+            if r.contains("'") || r.contains("’") { return (.correctness, "Apostrophe", "Use an apostrophe here: “\(r)”.") }
+            return (.correctness, "Punctuation", "The punctuation should be “\(r)”.")
+        }
+        if lo.replacingOccurrences(of: " ", with: "") == lr.replacingOccurrences(of: "-", with: "").replacingOccurrences(of: " ", with: "") {
+            return (.correctness, "Hyphen", "This compound is written “\(r)”.")
+        }
         let ow = lo.split(separator: " "), rw = lr.split(separator: " ")
         if ow.count == 1, rw.count == 1 {
             let a = String(ow[0]), b = String(rw[0])

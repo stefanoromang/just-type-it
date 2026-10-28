@@ -20,6 +20,16 @@ The checking happens **on your Mac**. It uses Apple's built-in spelling and gram
 
 ## Features
 
+### What's new in 1.1
+- **Much stronger grammar engine.** It now catches **64 out of 64** common errors in the built-in test set, up from 25: *has went*, *I seen*, *did you saw*, *can speaks*, *look forward to meet*, *everyone have*, *each of the students have*, *more taller*, *most easiest*, *informations*, *a good news*, *I am agree*, *when I will arrive*, *I am living here since 2010*, *borrow you my pen*, *to John and I*, *suggested me to go*, *went to store* and more. It also flags no false errors on the 1,200-word clean-writing test.
+- **AI suggestions in every app.** Apple Intelligence checks the paragraph you're writing in Outlook, Mail, Word, Slack and other apps, in addition to the instant rule-based checks.
+- **Suggestions panel with Fix all.** Click the colored badge in any text box to see every suggestion, fix them one by one, or fix them all at once.
+- **Pause anytime.** Pause for 1 hour or until tomorrow, or turn it off for one app, from the menu bar.
+- **First-run setup** walks you through the Accessibility permission.
+- **Uses about 1% CPU when idle.** It checks quickly while you type and slows down when you stop.
+- Email-friendly checks: missing comma after greetings (*Hi Team,*), capitalized words mid-sentence (*this email Is*), words in ALL CAPS, *T-shirt*, *different colors*, and list commas.
+- Email addresses, links, @mentions, file paths and tech names (*Node.js*, *macOS*) are never flagged.
+
 ### Grammar and correctness
 - **Real-time checking** with colored underlines: red for Correctness, blue for Clarity, green for Engagement, purple for Delivery.
 - **Subject-verb agreement**: *she go* → *she goes*, *me and him was* → *he and I were*.
@@ -121,21 +131,30 @@ cd just-type-it
 ./build-app.sh
 ```
 
-Run the built-in checker tests with `.build/release/JustTypeIt --self-test` (add `--ai` to test the Apple Intelligence features too).
+Run the built-in checker tests:
+
+```bash
+.build/release/JustTypeIt --self-test                                   # core checks
+.build/release/JustTypeIt --self-test --errors Tests/error-corpus.txt   # recall on 64 common errors
+.build/release/JustTypeIt --self-test --corpus Tests/clean-corpus.txt   # false alarms on correct writing
+.build/release/JustTypeIt --self-test --ai                              # Apple Intelligence features
+```
 
 The app is plain Swift and SwiftUI with no third-party dependencies:
 
 | File | What it does |
 |---|---|
 | `RuleEngine.swift` | System spelling and grammar, pattern rules, mechanics, sentence structure |
-| `RuleData.swift` | Grammar rules: confused words, agreement, pronouns, articles, prepositions |
+| `RuleData.swift` / `GrammarRules.swift` | Grammar rules: confused words, agreement, verb forms, tense, comparatives, uncountable nouns, pronouns, articles, prepositions, idioms |
+| `Morphology.swift` | English verb and noun forms used to build fixes |
 | `StyleChecks.swift` / `StyleData.swift` | Wordiness, passive voice, hedging, inclusive language, engagement, dialect, consistency, style guide |
 | `AIEngine.swift` / `WordDiff.swift` | On-device AI check, rewrites, generation and agents |
 | `Metrics.swift` | Scores, readability and tone detection |
 | `Integrity.swift` | Plagiarism check, AI detection, citations |
 | `EditorModel.swift` / `TextEditorView.swift` | Live checking, underlines, click-to-fix |
 | `MainView.swift`, `Panels.swift`, `AIPanels.swift`, `IntegrityPanel.swift` | User interface |
-| `Everywhere.swift` | Always-on checking and underlines inside other apps |
+| `Everywhere.swift` | Always-on checking, underlines, AI suggestions, summary panel and Fix all inside other apps |
+| `Onboarding.swift` | First-run setup |
 | `QuickCheck.swift` | ⌃⌥G check in any app |
 | `LoginItem.swift` | Launch at login |
 | `Store.swift` / `SettingsView.swift` | Documents, settings, dictionary, snippets, style guide |

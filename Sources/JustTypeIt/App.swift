@@ -66,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             QuickCheck.shared.installHotkey()
             let p = Store.shared.prefs
             if p.checkEverywhere { Everywhere.shared.start() }
+            if !p.onboarded { Onboarding.show() }
             LoginItem.set(p.launchAtLogin)
             // Started at login: stay in the menu bar, don't open the window.
             if CommandLine.arguments.contains("--background") || NSAppleEventManager.shared().currentAppleEvent?.paramDescriptor(forKeyword: keyAELaunchedAsLogInItem) != nil {
@@ -121,7 +122,8 @@ struct MenuBarContent: View {
                     NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
                 }
             } else {
-                Text("✓ Checking as you type in every app")
+                if let until = everywhere.pausedUntil { Text("⏸ Paused until \(until.formatted(date: .omitted, time: .shortened))") }
+                else { Text("✓ Checking as you type in every app") }
                 if !everywhere.currentApp.isEmpty { Text("\(everywhere.currentApp): \(everywhere.issueCount) suggestion\(everywhere.issueCount == 1 ? "" : "s")") }
             }
         }
@@ -129,6 +131,17 @@ struct MenuBarContent: View {
             store.prefs.checkEverywhere = v
             v ? Everywhere.shared.start() : Everywhere.shared.stop()
         }))
+        Toggle("AI Suggestions in All Apps", isOn: $store.prefs.aiEverywhere)
+        Menu("Pause Checking") {
+            Button("For 1 Hour") { everywhere.pausedUntil = Date().addingTimeInterval(3600) }
+            Button("Until Tomorrow") { everywhere.pausedUntil = Calendar.current.startOfDay(for: Date().addingTimeInterval(86400)) }
+            if everywhere.pausedUntil != nil { Button("Resume Now") { everywhere.pausedUntil = nil } }
+        }
+        Menu("English: \(store.prefs.dialect.label.replacingOccurrences(of: " English", with: ""))") {
+            ForEach(Dialect.allCases) { d in
+                Button { store.prefs.dialect = d } label: { if store.prefs.dialect == d { Label(d.label, systemImage: "checkmark") } else { Text(d.label) } }
+            }
+        }
         if let app = NSWorkspace.shared.menuBarOwningApplication, let bid = app.bundleIdentifier, bid != Bundle.main.bundleIdentifier {
             Button(store.prefs.excludedApps.contains(bid) ? "Resume in \(app.localizedName ?? bid)" : "Pause in \(app.localizedName ?? bid)") {
                 if let i = store.prefs.excludedApps.firstIndex(of: bid) { store.prefs.excludedApps.remove(at: i) } else { store.prefs.excludedApps.append(bid) }
@@ -136,6 +149,7 @@ struct MenuBarContent: View {
         }
         Divider()
         Button("Open Just Type It") { AppDelegate.openMain() }
+        Button("\(store.stats.suggestionsAccepted) fixes accepted so far") { AppDelegate.openMain() }
         Button("Check Selected Text  ⌃⌥G") { QuickCheck.shared.run() }
         Toggle("Launch at Login", isOn: Binding(get: { store.prefs.launchAtLogin }, set: { v in
             store.prefs.launchAtLogin = v

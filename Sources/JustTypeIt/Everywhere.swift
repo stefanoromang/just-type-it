@@ -28,7 +28,15 @@ final class Everywhere: ObservableObject {
     private var checkedText: String?
     private var dismissed: Set<String> = []
     private var mouseMonitor: Any?
+    private var keyMonitor: Any?
     private var enhancedPIDs: Set<pid_t> = []
+    private var aiIssues: [Issue] = []
+    private var aiTask: Task<Void, Never>?
+    private var aiCheckedParagraphs: [String: [Issue]] = [:]
+    private var layoutSignature = ""
+    @Published private(set) var aiWorking = false
+    @Published var pausedUntil: Date?
+    private let summary = CardPanel()
 
     private let overlay = OverlayWindow()
     private let badge = BadgePanel()
@@ -43,14 +51,21 @@ final class Everywhere: ObservableObject {
     var isTrusted: Bool { AXIsProcessTrusted() }
 
     func start() {
-        guard timer == nil else { return }
+        guard !running else { return }
         if !AXIsProcessTrusted() {
             let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
             _ = AXIsProcessTrustedWithOptions(opts)
         }
         running = true
-        timer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { _ in
-            MainActor.assumeIsolated { Everywhere.shared.tick() }
+        scheduleTick(0.3)
+        keyMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown]) { _ in
+            MainActor.assumeIsolated {
+                let s = Everywhere.shared
+                if s.timer?.fireDate.timeIntervalSinceNow ?? 0 > 0.3 { s.scheduleTick(0.15) }
+            }
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { Everywhere.shared.scheduleTick(0.1) }
         }
         mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp]) { e in
             let p = NSEvent.mouseLocation
@@ -59,11 +74,28 @@ final class Everywhere: ObservableObject {
         }
     }
 
+    /// Polls quickly while you type and slows down when nothing changes, to save battery.
+    private func scheduleTick(_ interval: TimeInterval) {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { _ in
+            MainActor.assumeIsolated {
+                let s = Everywhere.shared
+                guard s.running else { return }
+                s.tick()
+                let idle = Date().timeIntervalSince(s.lastEdit)
+                s.scheduleTick(idle < 5 ? 0.25 : (idle < 60 ? 0.5 : 1.0))
+            }
+        }
+        timer?.tolerance = interval * 0.2
+    }
+
     func stop() {
         timer?.invalidate()
         timer = nil
         if let m = mouseMonitor { NSEvent.removeMonitor(m) }
+        if let m = keyMonitor { NSEvent.removeMonitor(m) }
         mouseMonitor = nil
+        keyMonitor = nil
         running = false
         hideAll()
     }
@@ -72,14 +104,20 @@ final class Everywhere: ObservableObject {
         overlay.orderOut(nil)
         badge.orderOut(nil)
         card.orderOut(nil)
+        summary.orderOut(nil)
         rects = []
         issueCount = 0
+        layoutSignature = ""
     }
 
     // MARK: Polling
 
     private func tick() {
         guard AXIsProcessTrusted() else { hideAll(); return }
+        if let until = pausedUntil {
+            if Date() < until { hideAll(); return }
+            pausedUntil = nil
+        }
         guard let app = NSWorkspace.shared.frontmostApplication else { hideAll(); return }
         let bid = app.bundleIdentifier ?? ""
         if bid == Bundle.main.bundleIdentifier {
@@ -108,6 +146,8 @@ final class Everywhere: ObservableObject {
             lastText = ""
             checkedText = nil
             issues = []
+            aiIssues = []
+            aiTask?.cancel()
             card.orderOut(nil)
         }
         guard let full = string(el, kAXValueAttribute) else { hideAll(); return }
@@ -116,9 +156,10 @@ final class Everywhere: ObservableObject {
             lastEdit = Date()
             card.orderOut(nil)
         }
-        // Check after a short pause in typing.
+        // Check after a short pause in typing; AI looks at the current paragraph after a longer pause.
         if checkedText != full, Date().timeIntervalSince(lastEdit) > 0.45 {
             runCheck(full, element: el)
+            scheduleAI(full, element: el)
         }
         layout(el)
     }
@@ -189,10 +230,51 @@ final class Everywhere: ObservableObject {
             .map { i -> Issue in var i = i; i.range.location += offset; return i }
         // Don't flag the word being typed right now.
         let caret = selectedRange(el)?.location ?? -1
-        issues = found.filter { i in
+        var merged = found.filter { i in
             !(NSMaxRange(i.range) == caret && i.kind.hasPrefix("Spelling") && caret == ns.length)
         }
+        // Keep AI suggestions that still match the text and don't overlap rule suggestions.
+        aiIssues = aiIssues.filter { TextUtil.substring(full, $0.range) == $0.original && !dismissed.contains(key($0)) }
+        for a in aiIssues where !merged.contains(where: { NSIntersectionRange($0.range, a.range).length > 0 }) { merged.append(a) }
+        issues = merged.sorted { $0.range.location < $1.range.location }
         textOffset = offset
+        layoutSignature = ""
+    }
+
+    /// Runs Apple Intelligence on the paragraph around the cursor (and caches each paragraph's result).
+    private func scheduleAI(_ full: String, element el: AXUIElement) {
+        aiTask?.cancel()
+        guard Store.shared.prefs.aiEverywhere, AIEngine.available, TextUtil.wordCount(full) >= 4 else { return }
+        let caret = selectedRange(el)?.location ?? (full as NSString).length
+        aiTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            guard let self, !Task.isCancelled, self.lastText == full else { return }
+            let paras = TextUtil.paragraphs(full)
+            // Paragraph at the cursor first, then the rest of what's visible (up to 4 paragraphs).
+            let ordered = paras.sorted { abs($0.range.location - caret) < abs($1.range.location - caret) }.prefix(4)
+            self.aiWorking = true
+            defer { self.aiWorking = false }
+            var found: [Issue] = []
+            for p in ordered where TextUtil.wordCount(p.text) >= 4 {
+                if Task.isCancelled || self.lastText != full { return }
+                let local: [Issue]
+                if let cached = self.aiCheckedParagraphs[p.text] {
+                    local = cached
+                } else {
+                    let rules = self.issues.filter { $0.source != .ai }.compactMap { i -> Issue? in
+                        guard NSLocationInRange(i.range.location, p.range) else { return nil }
+                        var j = i; j.range.location -= p.range.location; return j
+                    }
+                    local = await AIEngine.deepCheck(p.text, goals: self.goalsForApp(), dialect: Store.shared.prefs.dialect, brand: Store.shared.prefs.brandTone, existing: rules)
+                    self.aiCheckedParagraphs[p.text] = local
+                    if self.aiCheckedParagraphs.count > 300 { self.aiCheckedParagraphs.removeAll() }
+                }
+                found += local.map { var i = $0; i.range.location += p.range.location; return i }
+            }
+            guard self.lastText == full else { return }
+            self.aiIssues = found
+            self.checkedText = nil
+        }
     }
 
     private func goalsForApp() -> Goals {
@@ -217,6 +299,11 @@ final class Everywhere: ObservableObject {
             return
         }
         guard let frame = elementFrame(el) else { hideAll(); return }
+        // Skip re-measuring when nothing moved (saves CPU; Accessibility calls are slow).
+        let probe = issues.first.flatMap { bounds(el, $0.range) } ?? .zero
+        let sig = "\(frame)|\(probe)|\(issues.count)|\(lastText.count)"
+        if sig == layoutSignature, overlay.isVisible || rects.isEmpty { return }
+        layoutSignature = sig
         let visible = frame.insetBy(dx: -2, dy: -2)
         var out: [(Issue, [NSRect])] = []
         let ns = lastText as NSString
@@ -297,6 +384,8 @@ final class Everywhere: ObservableObject {
 
     private func clicked(at p: NSPoint) {
         if card.isVisible, card.frame.contains(p) { return }
+        if summary.isVisible, summary.frame.contains(p) { return }
+        summary.orderOut(nil)
         if badge.isVisible, badge.frame.contains(p) { return }
         guard let hit = rects.first(where: { $0.1.contains { $0.insetBy(dx: -2, dy: -4).contains(p) } }) else {
             card.orderOut(nil)
@@ -306,9 +395,43 @@ final class Everywhere: ObservableObject {
     }
 
     func showAllFromBadge() {
-        guard let first = issues.first(where: { i in rects.contains { $0.0.id == i.id } }) ?? issues.first else { return }
-        let anchor = rects.first { $0.0.id == first.id }?.1.first ?? badge.frame
-        showCard(first, below: anchor)
+        card.orderOut(nil)
+        if summary.isVisible { summary.orderOut(nil); return }
+        let view = EverywhereSummary(issues: issues, app: currentApp, aiWorking: aiWorking,
+                                     apply: { [weak self] i in self?.apply(i, i.replacements.first ?? ""); self?.refreshSummary() },
+                                     show: { [weak self] i in
+                                         guard let self else { return }
+                                         self.summary.orderOut(nil)
+                                         let anchor = self.rects.first { $0.0.id == i.id }?.1.first ?? self.badge.frame
+                                         self.showCard(i, below: anchor)
+                                     },
+                                     fixAll: { [weak self] in self?.fixAll() },
+                                     openInApp: { [weak self] in self?.summary.orderOut(nil); self?.openInApp() },
+                                     close: { [weak self] in self?.summary.orderOut(nil) })
+        summary.showAbove(view, anchor: badge.frame)
+    }
+
+    private func refreshSummary() {
+        guard summary.isVisible else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+            guard let self, self.summary.isVisible else { return }
+            self.summary.orderOut(nil)
+            if !self.issues.isEmpty { self.showAllFromBadge() }
+        }
+    }
+
+    /// Applies every suggestion that has a fix, from the end of the text backwards so positions stay valid.
+    private func fixAll() {
+        summary.orderOut(nil)
+        let list = issues.filter { !$0.replacements.isEmpty && $0.range.length <= 80 }.sorted { $0.range.location > $1.range.location }
+        Task { @MainActor in
+            var lastStart = Int.max
+            for i in list where NSMaxRange(i.range) <= lastStart {
+                self.apply(i, i.replacements.first ?? "")
+                lastStart = i.range.location
+                try? await Task.sleep(nanoseconds: 120_000_000)
+            }
+        }
     }
 
     private func showCard(_ issue: Issue, below anchor: NSRect) {
@@ -536,6 +659,22 @@ struct BadgeView: View {
 }
 
 final class CardPanel: FloatingPanel {
+    func showAbove<V: View>(_ view: V, anchor: NSRect) {
+        let host = FirstMouseHostingView(rootView: AnyView(view.frame(width: 360)))
+        let size = host.fittingSize
+        host.frame = NSRect(origin: .zero, size: size)
+        contentView = host
+        var origin = NSPoint(x: anchor.maxX - size.width, y: anchor.maxY + 8)
+        if let screen = NSScreen.screens.first(where: { $0.frame.contains(anchor.origin) }) ?? NSScreen.main {
+            let vf = screen.visibleFrame
+            if origin.y + size.height > vf.maxY { origin.y = anchor.minY - size.height - 8 }
+            origin.x = min(max(vf.minX + 4, origin.x), vf.maxX - size.width - 4)
+            origin.y = max(vf.minY + 4, origin.y)
+        }
+        setFrame(NSRect(origin: origin, size: size), display: true)
+        orderFrontRegardless()
+    }
+
     func show<V: View>(_ view: V, below anchor: NSRect) {
         let host = FirstMouseHostingView(rootView: AnyView(view.frame(width: 330)))
         let size = host.fittingSize
@@ -598,6 +737,80 @@ struct EverywhereCard: View {
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 12).fill(.regularMaterial))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.1)))
+        .padding(1)
+    }
+}
+
+struct EverywhereSummary: View {
+    let issues: [Issue]
+    let app: String
+    let aiWorking: Bool
+    let apply: (Issue) -> Void
+    let show: (Issue) -> Void
+    let fixAll: () -> Void
+    let openInApp: () -> Void
+    let close: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Image(systemName: "character.cursor.ibeam").foregroundStyle(.tint)
+                Text("Just Type It").font(.headline)
+                Text("· \(app)").foregroundStyle(.secondary).lineLimit(1)
+                Spacer()
+                if aiWorking { ProgressView().controlSize(.mini); Text("AI").font(.caption2).foregroundStyle(.secondary) }
+                Button(action: close) { Image(systemName: "xmark") }.buttonStyle(.borderless)
+            }
+            HStack(spacing: 6) {
+                ForEach(IssueGroup.allCases) { g in
+                    let n = issues.filter { $0.group == g }.count
+                    VStack(spacing: 0) {
+                        Text("\(n)").font(.system(size: 13, weight: .bold)).monospacedDigit()
+                        Text(g.label).font(.system(size: 9))
+                    }
+                    .frame(maxWidth: .infinity).padding(.vertical, 4)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(g.color.opacity(n > 0 ? 0.15 : 0.04)))
+                    .foregroundStyle(n > 0 ? g.color : .secondary)
+                }
+            }
+            ScrollView {
+                VStack(spacing: 6) {
+                    ForEach(issues.prefix(60)) { i in
+                        HStack(alignment: .top, spacing: 8) {
+                            Circle().fill(i.group.color).frame(width: 7, height: 7).padding(.top, 5)
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 4) {
+                                    Text(i.original.prefix(40)).strikethrough(!i.replacements.isEmpty).foregroundStyle(.secondary).lineLimit(1)
+                                    if let r = i.replacements.first {
+                                        Image(systemName: "arrow.right").font(.caption2).foregroundStyle(.secondary)
+                                        Text(r.isEmpty ? "remove" : r).bold().lineLimit(1)
+                                    }
+                                }.font(.callout)
+                                Text(i.title + (i.source == .ai ? " ✨" : "")).font(.caption2).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if !i.replacements.isEmpty {
+                                Button("Fix") { apply(i) }.controlSize(.small)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture { show(i) }
+                        .padding(6)
+                        .background(RoundedRectangle(cornerRadius: 7).fill(Color.primary.opacity(0.04)))
+                    }
+                }
+            }
+            .frame(maxHeight: 300)
+            HStack {
+                Button(action: openInApp) { Label("Open in editor", systemImage: "arrow.up.forward.app") }.buttonStyle(.borderless).font(.caption)
+                Spacer()
+                let fixable = issues.filter { !$0.replacements.isEmpty }.count
+                Button("Fix all (\(fixable))", action: fixAll).buttonStyle(.borderedProminent).disabled(fixable == 0)
+            }
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 14).fill(.regularMaterial))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.primary.opacity(0.1)))
         .padding(1)
     }
 }

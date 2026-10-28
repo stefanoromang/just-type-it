@@ -23,7 +23,7 @@ enum WordDiff {
         }
     }
 
-    static func changes(from a: String, to b: String) -> [Change] {
+    static func changes(from a: String, to b: String, merged: Bool = true) -> [Change] {
         let ta = tokens(a), tb = tokens(b)
         let n = ta.count, m = tb.count
         guard n > 0, m > 0, n * m < 250_000 else { return [] }
@@ -73,6 +73,28 @@ enum WordDiff {
             }
         }
         flush()
+        return merged ? merge(out, in: a) : out
+    }
+
+    /// Joins edits separated by one or two short words so a list fix reads as one suggestion
+    /// ("colors and your size and address" → "colors, your size, and address").
+    static func merge(_ changes: [Change], in a: String) -> [Change] {
+        guard changes.count > 1 else { return changes }
+        let ns = a as NSString
+        var out: [Change] = [changes[0]]
+        for c in changes.dropFirst() {
+            let prev = out[out.count - 1]
+            let gapStart = NSMaxRange(prev.range)
+            guard c.range.location >= gapStart else { out.append(c); continue }
+            let gap = ns.substring(with: NSRange(location: gapStart, length: c.range.location - gapStart))
+            let gapWords = gap.split(whereSeparator: { $0.isWhitespace }).count
+            if gapWords <= 3, !gap.contains(where: { ".!?\n".contains($0) }) {
+                let range = NSRange(location: prev.range.location, length: NSMaxRange(c.range) - prev.range.location)
+                out[out.count - 1] = Change(range: range, replacement: prev.replacement + gap + c.replacement)
+            } else {
+                out.append(c)
+            }
+        }
         return out
     }
 }
