@@ -21,7 +21,7 @@ The checking happens **on your Mac**. It uses Apple's built-in spelling and gram
 ## Features
 
 ### What's new in 1.1
-- **Much stronger grammar engine.** It now catches **64 out of 64** common errors in the built-in test set, up from 25: *has went*, *I seen*, *did you saw*, *can speaks*, *look forward to meet*, *everyone have*, *each of the students have*, *more taller*, *most easiest*, *informations*, *a good news*, *I am agree*, *when I will arrive*, *I am living here since 2010*, *borrow you my pen*, *to John and I*, *suggested me to go*, *went to store* and more. It also flags no false errors on the 1,200-word clean-writing test.
+- **Much stronger grammar engine.** It now catches **64 out of 64** common errors in the built-in test set, up from 25: *has went*, *I seen*, *did you saw*, *can speaks*, *look forward to meet*, *everyone have*, *each of the students have*, *more taller*, *most easiest*, *informations*, *a good news*, *I am agree*, *when I will arrive*, *I am living here since 2010*, *borrow you my pen*, *to John and I*, *suggested me to go*, *went to store* and more. On a 690-word sample of correct writing, it flags no grammar or spelling errors (only two optional passive-voice hints).
 - **AI suggestions in every app.** Apple Intelligence checks the paragraph you're writing in Outlook, Mail, Word, Slack and other apps, in addition to the instant rule-based checks.
 - **Suggestions panel with Fix all.** Click the colored badge in any text box to see every suggestion, fix them one by one, or fix them all at once.
 - **Pause anytime.** Pause for 1 hour or until tomorrow, or turn it off for one app, from the menu bar.
