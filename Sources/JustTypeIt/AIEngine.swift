@@ -34,7 +34,7 @@ enum AIEngine {
         guard available else { return nil }
         let session = LanguageModelSession(model: SystemLanguageModel(useCase: .general, guardrails: .permissiveContentTransformations),
                                            instructions: instructions)
-        let opts = temperature.map { GenerationOptions(temperature: $0) } ?? GenerationOptions(samplingMode: .greedy)
+        let opts = temperature.map { GenerationOptions(temperature: $0) } ?? GenerationOptions(temperature: 0)
         do {
             let r = try await session.respond(to: prompt, options: opts)
             let t = clean(r.content)
