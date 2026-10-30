@@ -5,7 +5,7 @@
 <h1 align="center">Just Type It</h1>
 
 <p align="center">
-  <b>A free, private AI writing assistant for Mac.</b><br>
+  <b>A free, private AI writing assistant for Mac and Windows.</b><br>
   Grammar, clarity, tone, rewrites, plagiarism checks and AI writing tools in one native app.<br><br>
   Created by <b>Stefano Roman Gunness</b>
 </p>
@@ -14,7 +14,7 @@
 
 ---
 
-Just Type It checks your writing as you type. It underlines mistakes, explains each one, and fixes it in one click. It also helps with clarity, tone and style, and it works in any app on your Mac.
+Just Type It checks your writing as you type. It underlines mistakes, explains each one, and fixes it in one click. It also helps with clarity, tone and style, and it works in any app on your Mac or Windows PC.
 
 The checking happens **on your Mac**. It uses Apple's built-in spelling and grammar engine, a large set of hand-written rules, and Apple Intelligence's on-device language model. There's no account, no subscription and no word limit. The only feature that goes online is the web plagiarism check, and only when you click it.
 
@@ -100,7 +100,26 @@ The checking happens **on your Mac**. It uses Apple's built-in spelling and gram
 - **Brand tone**: a description that shapes every AI rewrite, plus a one-click *Match brand tone* button.
 - **Snippets**: type a trigger such as `;sig` and it expands into the full text.
 
+## Mac and Windows
+
+| Feature | Mac | Windows |
+|---|---|---|
+| Live underlines while you type in other apps (Outlook, Word, Teams, Chrome, Edge…) | ✅ | ✅ (UI Automation) |
+| Suggestion badge, one-click fixes, Fix all | ✅ | ✅ |
+| Grammar rules (107 shared rules, same `rules.json`) | ✅ | ✅ |
+| Spelling | macOS spell checker | Windows spell checker (same one Office uses) |
+| Clarity, tone, inclusive language, dialects, scores | ✅ | ✅ |
+| Check selected text in any app | ⌃⌥G | Ctrl+Alt+G |
+| Editor window with suggestions and scores | ✅ | ✅ |
+| Starts automatically, runs in the menu bar / system tray | ✅ | ✅ |
+| AI rewrites, tone changes, agents, AI suggestions | ✅ Apple Intelligence | Not yet (needs an on-device model) |
+| Plagiarism check, AI detector, citations | ✅ | Not yet |
+
+Both apps use the same rule data, exported from the Mac sources to `windows/JustTypeIt.Core/rules.json`, and the same test sets. Both catch 64 out of 64 errors in `Tests/error-corpus.txt`.
+
 ## Requirements
+
+**Mac**
 
 | | |
 |---|---|
@@ -108,7 +127,21 @@ The checking happens **on your Mac**. It uses Apple's built-in spelling and gram
 | macOS | 26 (Tahoe) or newer |
 | Apple Intelligence | Recommended. It powers AI checks, rewrites, tone changes, the AI writing tools and the agents. All rule-based checks work without it. |
 
-## Install
+**Windows**: Windows 10 (version 2004) or Windows 11, 64-bit. No administrator rights needed.
+
+## Install on Windows
+
+Open **PowerShell** (a normal window) and paste:
+
+```powershell
+irm https://raw.githubusercontent.com/stefanoromang/just-type-it/main/install-windows.ps1 | iex
+```
+
+Or download `JustTypeIt-Setup-<version>.exe` (installer) or the portable zip from [Releases](https://github.com/stefanoromang/just-type-it/releases). Both install for your user only.
+
+Just Type It then runs in the system tray (near the clock) and starts with Windows. Type in any app and mistakes are underlined; click an underline or the colored badge to fix them. Select text anywhere and press **Ctrl+Alt+G** for a quick check.
+
+## Install on Mac
 
 Open **Terminal** and paste:
 
@@ -128,7 +161,8 @@ To check text **in other apps**, allow Just Type It under System Settings → Pr
 - Spelling and grammar: Apple's on-device `NSSpellChecker` plus the app's own rules.
 - AI features: Apple's on-device Foundation Models (Apple Intelligence).
 - Plagiarism check: only when you click **Check web**. It sends your longest sentences as search queries and downloads the pages it finds. **Offline only** compares just your documents and pasted sources.
-- No servers, no analytics, no accounts. Documents and settings are stored in `~/Library/Application Support/JustTypeIt`.
+- No servers, no analytics, no accounts. Documents and settings are stored in `~/Library/Application Support/JustTypeIt` (Mac) or `%LOCALAPPDATA%\JustTypeIt` (Windows).
+- Windows: text is read through UI Automation only from the focused text box and checked on your PC. Password fields are never read.
 
 ## Build from source
 
@@ -169,7 +203,27 @@ The app is plain Swift and SwiftUI with no third-party dependencies:
 | `LoginItem.swift` | Launch at login |
 | `Store.swift` / `SettingsView.swift` | Documents, settings, dictionary, snippets, style guide |
 
+### Windows
+
+```bash
+dotnet test windows/JustTypeIt.Tests/JustTypeIt.Tests.csproj        # engine tests (runs on Mac, Linux or Windows)
+dotnet publish windows/JustTypeIt/JustTypeIt.csproj -c Release -r win-x64 --self-contained true -o windows/dist/JustTypeIt
+windows\dist\JustTypeIt\JustTypeIt.exe --selftest report.txt        # on Windows: spell checker + live check in Notepad
+```
+
+After changing grammar rules on the Mac side, refresh the shared file:
+
+```bash
+.build/release/JustTypeIt --self-test --export-rules windows/JustTypeIt.Core/rules.json
+```
+
+GitHub Actions builds and tests both apps on every push, runs the Windows self-test on a real Windows machine, and attaches the Windows installer and portable zip to each release.
+
 ## Uninstall
+
+**Windows:** Settings → Apps → Installed apps → Just Type It → Uninstall (or delete `%LOCALAPPDATA%\Programs\JustTypeIt` if you used the portable zip).
+
+**Mac:**
 
 ```bash
 zsh uninstall-mac.sh

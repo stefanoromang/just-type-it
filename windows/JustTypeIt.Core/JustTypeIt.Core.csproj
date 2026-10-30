@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Just Type It checking engine (shared rules) – created by Stefano Roman Gunness · MIT License -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>JustTypeIt</RootNamespace>
+    <AssemblyName>JustTypeIt.Core</AssemblyName>
+    <Authors>Stefano Roman Gunness</Authors>
+    <Copyright>© 2026 Stefano Roman Gunness. MIT License.</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="rules.json" LogicalName="JustTypeIt.rules.json" />
+  </ItemGroup>
+
+</Project>

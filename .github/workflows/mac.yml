@@ -1,0 +1,25 @@
+# Builds and tests Just Type It for Mac.
+# Created by Stefano Roman Gunness · MIT License
+name: Mac
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build
+        run: swift build -c release
+      - name: Grammar tests (64-error recall + clean-writing false alarms)
+        run: .build/release/JustTypeIt --self-test --errors Tests/error-corpus.txt --corpus Tests/clean-corpus.txt
+      - name: Outlook compatibility tests
+        run: zsh scripts/test-outlook-compatibility.sh
+      - name: Shared rules are up to date for Windows
+        run: |
+          .build/release/JustTypeIt --self-test --export-rules /tmp/rules.json
+          diff -q /tmp/rules.json windows/JustTypeIt.Core/rules.json || (echo "Run: .build/release/JustTypeIt --self-test --export-rules windows/JustTypeIt.Core/rules.json" && exit 1)

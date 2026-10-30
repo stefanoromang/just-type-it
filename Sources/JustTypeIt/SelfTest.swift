@@ -6,7 +6,33 @@ import Foundation
 /// `JustTypeIt --self-test` runs the checker on sample sentences and prints the results.
 @MainActor
 enum SelfTest {
+    /// Writes the shared rule data used by the Windows app (windows/JustTypeIt.Core/rules.json).
+    static func exportRules(_ path: String) -> Int32 {
+        func rule(_ r: PatternRule) -> [String: Any] {
+            ["pattern": r.pattern, "replacement": r.replacement, "group": r.group.rawValue, "kind": r.kind,
+             "title": r.title, "explanation": r.explanation, "caseInsensitive": r.caseInsensitive]
+        }
+        let pairs: ([(String, String)]) -> [[String]] = { $0.map { [$0.0, $0.1] } }
+        let json: [String: Any] = [
+            "grammar": (RuleData.grammar + GrammarRules.all).map(rule),
+            "wordy": pairs(StyleData.wordy), "redundant": pairs(StyleData.redundant),
+            "informal": pairs(StyleData.informal), "usToUK": pairs(StyleData.usToUK),
+            "hedges": StyleData.hedges,
+            "weakWords": StyleData.weakWords,
+            "inclusive": StyleData.inclusive.map { ["term": $0.0, "alternatives": $0.1, "why": $0.2] as [String: Any] },
+            "irregular": Morph.irregular.map { [$0.0, $0.1, $0.2] },
+            "synonyms": Synonyms.table,
+        ]
+        guard let d = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]),
+              (try? d.write(to: URL(fileURLWithPath: path))) != nil else { return 1 }
+        print("Exported \((RuleData.grammar + GrammarRules.all).count) grammar rules to \(path)")
+        return 0
+    }
+
     static func run() -> Int32 {
+        if let i = CommandLine.arguments.firstIndex(of: "--export-rules"), i + 1 < CommandLine.arguments.count {
+            return exportRules(CommandLine.arguments[i + 1])
+        }
         let samples: [(String, [String])] = [
             ("Their going to the store tomorow.", ["They're going", "tomorrow"]),
             ("He dont care about the affect it has.", ["He doesn't", "effect"]),

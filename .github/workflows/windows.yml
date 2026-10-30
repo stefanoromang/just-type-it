@@ -1,0 +1,68 @@
+# Builds, tests and publishes Just Type It for Windows.
+# Created by Stefano Roman Gunness · MIT License
+name: Windows
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  engine-tests:
+    name: Checking engine tests (same rules as Mac)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet test windows/JustTypeIt.Tests/JustTypeIt.Tests.csproj
+
+  build:
+    name: Build, self-test on real Windows, package
+    runs-on: windows-latest
+    needs: engine-tests
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+      - name: Publish (self-contained, win-x64)
+        run: dotnet publish windows/JustTypeIt/JustTypeIt.csproj -c Release -r win-x64 --self-contained true -o windows/dist/JustTypeIt
+      - name: End-to-end self-test (spell checker + live check in Notepad)
+        shell: pwsh
+        run: |
+          $p = Start-Process windows\dist\JustTypeIt\JustTypeIt.exe -ArgumentList "--selftest", "$PWD\selftest-report.txt" -PassThru
+          $done = $p.WaitForExit(300000)
+          if (Test-Path selftest-report.txt) { Get-Content selftest-report.txt }
+          if (-not $done) { $p.Kill(); throw "Self-test timed out" }
+          if ($p.ExitCode -ne 0) { throw "Self-test failed" }
+      - name: Installer + portable zip
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" windows\installer\JustTypeIt.iss
+          $v = ([xml](Get-Content windows/JustTypeIt/JustTypeIt.csproj)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+          Compress-Archive -Path windows/dist/JustTypeIt/* -DestinationPath "windows/dist/JustTypeIt-$v-win-x64-portable.zip"
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: JustTypeIt-Windows
+          path: |
+            windows/dist/JustTypeIt-Setup-*.exe
+            windows/dist/JustTypeIt-*-portable.zip
+            selftest-report.txt
+      - name: Attach to release
+        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = if ("${{ github.event_name }}" -eq "release") { "${{ github.event.release.tag_name }}" } else { (gh release view --json tagName -q .tagName) }
+          gh release upload $tag (Get-Item windows/dist/JustTypeIt-Setup-*.exe).FullName (Get-Item windows/dist/JustTypeIt-*-portable.zip).FullName --clobber
