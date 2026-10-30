@@ -36,6 +36,8 @@ final class Everywhere: ObservableObject {
     private var layoutSignature = ""
     @Published private(set) var aiWorking = false
     @Published var pausedUntil: Date?
+    @Published private(set) var editError: String?
+    private var applyingCorrection = false
     private let summary = CardPanel()
 
     private let overlay = OverlayWindow()
@@ -113,6 +115,7 @@ final class Everywhere: ObservableObject {
     // MARK: Polling
 
     private func tick() {
+        guard !applyingCorrection else { return }
         guard AXIsProcessTrusted() else { hideAll(); return }
         if let until = pausedUntil {
             if Date() < until { hideAll(); return }
@@ -131,18 +134,18 @@ final class Everywhere: ObservableObject {
         if !enhancedPIDs.contains(app.processIdentifier) {
             // Chromium and Electron apps (Chrome, Edge, Slack, Teams, Notion…) only expose web text when asked.
             AXUIElementSetAttributeValue(axApp, "AXManualAccessibility" as CFString, kCFBooleanTrue)
-            if ["com.google.Chrome", "com.microsoft.edgemac", "com.brave.Browser", "company.thebrowser.Browser", "com.vivaldi.Vivaldi", "com.operasoftware.Opera"].contains(bid) {
+            if ["com.google.Chrome", "com.microsoft.edgemac", "com.brave.Browser", "company.thebrowser.Browser", "com.vivaldi.Vivaldi", "com.operasoftware.Opera", FocusedEditor.outlookID].contains(bid) {
                 AXUIElementSetAttributeValue(axApp, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
             }
             enhancedPIDs.insert(app.processIdentifier)
         }
         AXUIElementSetMessagingTimeout(axApp, 0.25)
-        guard let el = focusedTextElement(axApp) else { hideAll(); element = nil; return }
+        guard let el = FocusedEditor.resolve(app: axApp, pid: app.processIdentifier, bundleID: bid) else { hideAll(); element = nil; return }
+        currentApp = app.localizedName ?? ""
         if element == nil || !CFEqual(el, element!) || pid != app.processIdentifier {
             element = el
             pid = app.processIdentifier
             bundleID = bid
-            currentApp = app.localizedName ?? ""
             lastText = ""
             checkedText = nil
             issues = []
@@ -162,28 +165,6 @@ final class Everywhere: ObservableObject {
             scheduleAI(full, element: el)
         }
         layout(el)
-    }
-
-    private func focusedTextElement(_ axApp: AXUIElement) -> AXUIElement? {
-        var v: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(axApp, kAXFocusedUIElementAttribute as CFString, &v) == .success, let v else { return nil }
-        let el = v as! AXUIElement
-        let role = string(el, kAXRoleAttribute) ?? ""
-        let sub = string(el, kAXSubroleAttribute) ?? ""
-        if sub == "AXSecureTextField" || role == "AXSecureTextField" { return nil }
-        let textRoles: Set<String> = ["AXTextArea", "AXTextField", "AXComboBox"]
-        var editable = textRoles.contains(role)
-        if !editable {
-            var e: CFTypeRef?
-            if AXUIElementCopyAttributeValue(el, "AXEditable" as CFString, &e) == .success, (e as? Bool) == true { editable = true }
-        }
-        guard editable else { return nil }
-        // Single-line search/URL fields aren't worth checking.
-        if role == "AXTextField" || role == "AXComboBox" {
-            let desc = ((string(el, kAXDescriptionAttribute) ?? "") + (string(el, kAXPlaceholderValueAttribute) ?? "") + (string(el, kAXIdentifierAttribute) ?? "")).lowercased()
-            if ["search", "address", "url", "password", "email address", "find"].contains(where: desc.contains) { return nil }
-        }
-        return el
     }
 
     private func string(_ el: AXUIElement, _ attr: String) -> String? {
@@ -427,9 +408,8 @@ final class Everywhere: ObservableObject {
         Task { @MainActor in
             var lastStart = Int.max
             for i in list where NSMaxRange(i.range) <= lastStart {
-                self.apply(i, i.replacements.first ?? "")
+                guard await self.applyCorrection(i, i.replacements.first ?? "") else { break }
                 lastStart = i.range.location
-                try? await Task.sleep(nanoseconds: 120_000_000)
             }
         }
     }
@@ -476,9 +456,14 @@ final class Everywhere: ObservableObject {
 
     /// Replaces the flagged text inside the other app.
     private func apply(_ issue: Issue, _ replacement: String) {
+        Task { @MainActor in _ = await applyCorrection(issue, replacement) }
+    }
+
+    private func applyCorrection(_ issue: Issue, _ replacement: String) async -> Bool {
+        guard !applyingCorrection else { return false }
         card.orderOut(nil)
         guard let el = element, let current = string(el, kAXValueAttribute),
-              TextUtil.substring(current, issue.range) == issue.original else { recheckNow(); return }
+              TextUtil.substring(current, issue.range) == issue.original else { recheckNow(); return false }
         var rep = replacement
         var range = issue.range
         if rep.isEmpty {
@@ -493,54 +478,21 @@ final class Everywhere: ObservableObject {
                 rep = next.uppercased()
             }
         }
-        var cf = CFRange(location: range.location, length: range.length)
-        guard let rv = AXValueCreate(.cfRange, &cf) else { return }
-        AXUIElementSetAttributeValue(el, kAXSelectedTextRangeAttribute as CFString, rv)
-        var settable = DarwinBoolean(false)
-        AXUIElementIsAttributeSettable(el, kAXSelectedTextAttribute as CFString, &settable)
-        var done = false
-        if settable.boolValue, AXUIElementSetAttributeValue(el, kAXSelectedTextAttribute as CFString, rep as CFString) == .success {
-            let after = string(el, kAXValueAttribute) ?? ""
-            done = after != current && (after as NSString).length == (current as NSString).length - range.length + (rep as NSString).length
-        }
-        if !done { paste(rep) }
-        Store.shared.recordAccept(issue)
-        issues.removeAll { $0.id == issue.id }
+        applyingCorrection = true
+        defer { applyingCorrection = false }
+        let done = await AccessibilityEdit.apply(editor: el, appPID: pid, bundleID: bundleID,
+                                                 snapshot: current, range: range,
+                                                 original: TextUtil.substring(current, range), replacement: rep)
         checkedText = nil
         lastEdit = Date().addingTimeInterval(-1)
-    }
-
-    private func paste(_ s: String) {
-        let pb = NSPasteboard.general
-        let saved = pb.pasteboardItems?.compactMap { item -> [NSPasteboard.PasteboardType: Data]? in
-            var d: [NSPasteboard.PasteboardType: Data] = [:]
-            for t in item.types { if let v = item.data(forType: t) { d[t] = v } }
-            return d
-        } ?? []
-        pb.clearContents()
-        if s.isEmpty {
-            // Deleting: send Delete instead of pasting nothing.
-            key(51, flags: [])
-        } else {
-            pb.setString(s, forType: .string)
-            pb.setData(Data(), forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
-            key(9, flags: .maskCommand)
+        guard done else {
+            editError = "Couldn't safely apply the correction. Click back into your draft and try again."
+            return false
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            pb.clearContents()
-            let items: [NSPasteboardItem] = saved.map { d in let it = NSPasteboardItem(); for (t, v) in d { it.setData(v, forType: t) }; return it }
-            if !items.isEmpty { pb.writeObjects(items) }
-        }
-    }
-
-    private func key(_ code: CGKeyCode, flags: CGEventFlags) {
-        let src = CGEventSource(stateID: .combinedSessionState)
-        let d = CGEvent(keyboardEventSource: src, virtualKey: code, keyDown: true)
-        let u = CGEvent(keyboardEventSource: src, virtualKey: code, keyDown: false)
-        d?.flags = flags
-        u?.flags = flags
-        d?.post(tap: .cghidEventTap)
-        u?.post(tap: .cghidEventTap)
+        editError = nil
+        Store.shared.recordAccept(issue)
+        issues.removeAll { $0.id == issue.id }
+        return true
     }
 }
 

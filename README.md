@@ -20,6 +20,13 @@ The checking happens **on your Mac**. It uses Apple's built-in spelling and gram
 
 ## Features
 
+### What's new in 1.1.1 — Outlook compatibility
+- **Outlook compose detection fixed.** Outlook hosts its message body in a separate WebKit process. The checker now resolves that text area through system focus or a bounded, cycle-safe search of the active compose window, rather than requiring Outlook's app-level focus to expose it.
+- **Verified corrections.** Outlook can report success without changing text. Corrections now verify the selected range, use paste for Outlook, and compare the entire resulting message with the expected text before counting a fix. The rest of the message and signature stay unchanged.
+- **Safer Fix all.** Corrections run serially, stop on failure, and refuse to paste into a different app or field. Clipboard formats are restored unless you copied something new during the correction.
+- Recipient fields, password fields, search boxes and inbox reading panes are not treated as compose bodies.
+- Verified against a recipient-free test compose in the installed Outlook for Mac. This is a macOS desktop integration, not an Outlook mobile or Windows add-in.
+
 ### What's new in 1.1
 - **Much stronger grammar engine.** It now catches **64 out of 64** common errors in the built-in test set, up from 25: *has went*, *I seen*, *did you saw*, *can speaks*, *look forward to meet*, *everyone have*, *each of the students have*, *more taller*, *most easiest*, *informations*, *a good news*, *I am agree*, *when I will arrive*, *I am living here since 2010*, *borrow you my pen*, *to John and I*, *suggested me to go*, *went to store* and more. On a 690-word sample of correct writing, it flags no grammar or spelling errors (only two optional passive-voice hints).
 - **AI suggestions in every app.** Apple Intelligence checks the paragraph you're writing in Outlook, Mail, Word, Slack and other apps, in addition to the instant rule-based checks.
@@ -138,7 +145,10 @@ Run the built-in checker tests:
 .build/release/JustTypeIt --self-test --errors Tests/error-corpus.txt   # recall on 64 common errors
 .build/release/JustTypeIt --self-test --corpus Tests/clean-corpus.txt   # false alarms on correct writing
 .build/release/JustTypeIt --self-test --ai                              # Apple Intelligence features
+zsh scripts/test-outlook-compatibility.sh                              # 5 integration-safety regression tests
 ```
+
+For the opt-in live Outlook test and its exact safety requirements, see [Outlook verification](docs/outlook-verification.md).
 
 The app is plain Swift and SwiftUI with no third-party dependencies:
 

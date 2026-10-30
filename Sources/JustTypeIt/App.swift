@@ -125,6 +125,7 @@ struct MenuBarContent: View {
                 if let until = everywhere.pausedUntil { Text("⏸ Paused until \(until.formatted(date: .omitted, time: .shortened))") }
                 else { Text("✓ Checking as you type in every app") }
                 if !everywhere.currentApp.isEmpty { Text("\(everywhere.currentApp): \(everywhere.issueCount) suggestion\(everywhere.issueCount == 1 ? "" : "s")") }
+                if let error = everywhere.editError { Text(error) }
             }
         }
         Toggle("Check in All Apps", isOn: Binding(get: { store.prefs.checkEverywhere }, set: { v in
