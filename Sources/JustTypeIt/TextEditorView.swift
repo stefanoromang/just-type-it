@@ -35,6 +35,10 @@ struct TextEditorView: NSViewRepresentable {
         tv.drawsBackground = false
         model.textView = tv
         context.coordinator.textView = tv
+        let double = NSClickGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.doubleClicked(_:)))
+        double.numberOfClicksRequired = 2
+        double.delaysPrimaryMouseButtonEvents = false
+        tv.addGestureRecognizer(double)
         let click = NSClickGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.clicked(_:)))
         click.delaysPrimaryMouseButtonEvents = false
         tv.addGestureRecognizer(click)
@@ -58,6 +62,7 @@ struct TextEditorView: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let tv = notification.object as? NSTextView else { return }
             expandSnippets(tv)
+            autocorrect(tv)
             model.textChanged(tv.string)
         }
 
@@ -76,6 +81,54 @@ struct TextEditorView: NSViewRepresentable {
                     return
                 }
             }
+        }
+
+        private var lastLength = 0
+
+        /// Fixes obvious typos the moment a word is finished. ⌘Z undoes it.
+        private func autocorrect(_ tv: NSTextView) {
+            let len = (tv.string as NSString).length
+            defer { lastLength = (tv.string as NSString).length }
+            guard Store.shared.prefs.autocorrect, len == lastLength + 1 else { return }
+            let caret = tv.selectedRange().location
+            guard let fix = Proactive.autocorrect(tv.string, caret: caret, dictionary: Set(Store.shared.prefs.dictionary.map { $0.lowercased() })),
+                  tv.shouldChangeText(in: fix.range, replacementString: fix.replacement) else { return }
+            tv.textStorage?.replaceCharacters(in: fix.range, with: fix.replacement)
+            tv.didChangeText()
+            tv.undoManager?.setActionName("Autocorrect")
+            tv.setSelectedRange(NSRange(location: fix.range.location + (fix.replacement as NSString).length + 1, length: 0))
+            Store.shared.stats.autocorrections += 1
+        }
+
+        /// Double-click a word to see synonyms and replace it with one click.
+        @objc func doubleClicked(_ g: NSClickGestureRecognizer) {
+            guard let tv = textView else { return }
+            let idx = tv.characterIndexForInsertion(at: g.location(in: tv))
+            let ns = tv.string as NSString
+            guard idx < ns.length else { return }
+            let range = tv.selectionRange(forProposedRange: NSRange(location: idx, length: 0), granularity: .selectByWord)
+            let word = ns.substring(with: range).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard word.count >= 3, word.allSatisfy(\.isLetter) else { return }
+            let syns = Synonyms.lookup(word).filter { !$0.isEmpty }
+            guard !syns.isEmpty else { return }
+            popover?.close()
+            guard let lm = tv.layoutManager, let tc = tv.textContainer else { return }
+            var rect = lm.boundingRect(forGlyphRange: lm.glyphRange(forCharacterRange: range, actualCharacterRange: nil), in: tc)
+            rect.origin.x += tv.textContainerOrigin.x
+            rect.origin.y += tv.textContainerOrigin.y
+            let pop = NSPopover()
+            pop.behavior = .transient
+            pop.contentViewController = NSHostingController(rootView: SynonymCard(word: word, synonyms: syns) { [weak self, weak pop] s in
+                pop?.close()
+                guard let tv = self?.textView, (tv.string as NSString).substring(with: range).trimmingCharacters(in: .whitespaces) == word else { return }
+                let rep = TextUtil.matchCase(s, like: word)
+                if tv.shouldChangeText(in: range, replacementString: rep) {
+                    tv.textStorage?.replaceCharacters(in: range, with: rep)
+                    tv.didChangeText()
+                }
+            }.padding(10))
+            pop.show(relativeTo: rect, of: tv, preferredEdge: .maxY)
+            popover = pop
         }
 
         @objc func clicked(_ g: NSClickGestureRecognizer) {
@@ -102,5 +155,20 @@ struct TextEditorView: NSViewRepresentable {
             pop.show(relativeTo: rect, of: tv, preferredEdge: .maxY)
             popover = pop
         }
+    }
+}
+
+struct SynonymCard: View {
+    let word: String
+    let synonyms: [String]
+    let pick: (String) -> Void
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Synonyms for “\(word)”").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            ForEach(synonyms.prefix(6), id: \.self) { s in
+                Button(s) { pick(s) }.buttonStyle(.borderless)
+            }
+        }
+        .frame(minWidth: 180, alignment: .leading)
     }
 }

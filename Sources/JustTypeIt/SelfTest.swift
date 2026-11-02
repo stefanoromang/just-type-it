@@ -29,7 +29,45 @@ enum SelfTest {
         return 0
     }
 
+    static func benchmark() -> Int32 {
+        let base = (try? String(contentsOfFile: "Tests/clean-corpus.txt", encoding: .utf8)) ?? Store.welcomeText
+        var o = CheckOptions(); o.goals = Goals()
+        for (label, text) in [("email (120 words)", String(base.prefix(700))), ("page (700 words)", base), ("long doc (2,800 words)", String(repeating: base + "\n\n", count: 4))] {
+            _ = RuleEngine.check(text, options: o)
+            let t0 = Date()
+            for _ in 0..<3 { _ = RuleEngine.check(text, options: o) }
+            print(String(format: "%@: %.0f ms per check", label, Date().timeIntervalSince(t0) * 1000 / 3))
+        }
+        do {
+            var doc = String(repeating: base + "\n\n", count: 4)
+            _ = RuleEngine.check(doc, options: o)
+            let t0 = Date()
+            for k in 0..<10 { doc += " word\(k)"; _ = RuleEngine.check(doc, options: o) }
+            print(String(format: "typing into a 2,800-word doc: %.0f ms per keystroke pause", Date().timeIntervalSince(t0) * 100))
+            func t(_ n: String, _ f: () -> Void) { let a = Date(); f(); print(String(format: "    %@ %.0f ms", n, Date().timeIntervalSince(a) * 1000)) }
+            t("docwide") { _ = StyleChecks.documentWide(doc, o) }
+            t("repetition") { _ = StyleChecks.repetition(doc, o) }
+            t("consistency") { _ = StyleChecks.consistency(doc) }
+            t("paragraphs (NL)") { _ = TextUtil.paragraphs(doc) }
+            t("words") { _ = TextUtil.words(doc) }
+            t("dedupe") { _ = RuleEngine.dedupe(RuleEngine.check(doc, options: o), text: doc, o: o) }
+            t("paragraph split") { _ = RuleEngine.lineParagraphs(doc) }
+        }
+        let text = base
+        func time(_ name: String, _ f: () -> Void) { let t = Date(); for _ in 0..<3 { f() }; print(String(format: "  %@: %.0f ms", name, Date().timeIntervalSince(t) * 1000 / 3)) }
+        time("system spelling") { _ = RuleEngine.systemCheck(text, o) }
+        time("pattern rules") { _ = RuleEngine.patternRules(text, o) }
+        time("mechanics") { _ = RuleEngine.mechanics(text) }
+        time("structure") { _ = RuleEngine.structure(text) }
+        time("style") { _ = StyleChecks.run(text, o) }
+        time("style: engagement") { _ = StyleChecks.engagement(text, o) }
+        time("style: dialect") { _ = StyleChecks.dialect(text, .american) }
+        time("style: consistency") { _ = StyleChecks.consistency(text) }
+        return 0
+    }
+
     static func run() -> Int32 {
+        if CommandLine.arguments.contains("--benchmark") { return benchmark() }
         if let i = CommandLine.arguments.firstIndex(of: "--export-rules"), i + 1 < CommandLine.arguments.count {
             return exportRules(CommandLine.arguments[i + 1])
         }
@@ -59,6 +97,32 @@ enum SelfTest {
             print(missing.isEmpty ? "PASS" : "FAIL missing \(missing)", "|", s)
             for f in flat { print("    ", f) }
         }
+        // Proactive features
+        func ac(_ t: String) -> String? {
+            guard let f = Proactive.autocorrect(t, caret: (t as NSString).length) else { return nil }
+            return (t as NSString).replacingCharacters(in: f.range, with: f.replacement)
+        }
+        let acCases: [(String, String?)] = [
+            ("I think teh ", "I think the "), ("Teh ", "The "), ("we dont ", "we don't "), ("recieved,", "received,"),
+            ("i ", "I "), ("He said im ", "He said I'm "), ("email me@teh ", nil), ("the ", nil), ("Ill ", nil),
+            ("I feel ill ", nil), ("I wont ", nil), ("visit www.teh ", nil),
+        ]
+        for (input, expected) in acCases {
+            let got = ac(input)
+            let ok = got == expected
+            if !ok { fails += 1 }
+            print(ok ? "PASS" : "FAIL", "| autocorrect", "“\(input)” →", got.map { "“\($0)”" } ?? "no change")
+        }
+        let send = Proactive.preSendWarnings("Hi Sam, please see attached. This is unacceptable.", issues: [])
+        let sendOK = send.contains { $0.title.contains("attachment") } && send.contains { $0.title.contains("harsh") }
+        if !sendOK { fails += 1 }
+        print(sendOK ? "PASS" : "FAIL", "| pre-send check:", send.map(\.title))
+        let cleanSend = Proactive.preSendWarnings("Hi Sam, thanks for the update. See you Monday.", issues: [])
+        if !cleanSend.isEmpty { fails += 1 }
+        print(cleanSend.isEmpty ? "PASS" : "FAIL", "| pre-send check on a clean message:", cleanSend.map(\.title))
+        let tone = Proactive.toneEmoji("Thank you so much for your help, I really appreciate it and I'm glad we could finish this together.")
+        if tone == nil { fails += 1 }
+        print(tone != nil ? "PASS" : "FAIL", "| tone:", tone.map { "\($0.emoji) \($0.label)" } ?? "none")
         let contact = "E: stefano.roman@buyersedgeplatform.com www.buyersedgeplatform.com @stefanoromang"
         let contactIssues = RuleEngine.check(contact, options: o)
         print("contact-line issues:", contactIssues.count, contactIssues.map(\.original))

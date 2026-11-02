@@ -35,6 +35,7 @@ struct MainView: View {
     @ObservedObject var store: Store
     @VState private var panel: SidePanel = .suggestions
     @VState private var showGoals = false
+    @VState private var showSendCheck = false
     @VState private var search = ""
 
     var body: some View {
@@ -120,6 +121,17 @@ struct MainView: View {
                     }
                 } label: { Text(store.prefs.dialect.label.replacingOccurrences(of: " English", with: "")) }
                 .fixedSize()
+                Button { showSendCheck = true } label: { Label("Ready to send?", systemImage: "paperplane") }
+                    .help("Final check before you send: mistakes, attachments, tone")
+                    .popover(isPresented: $showSendCheck, arrowEdge: .bottom) {
+                        SendCheckView(warnings: Proactive.preSendWarnings(model.text, issues: model.issues),
+                                      fixAll: { model.acceptAll(); showSendCheck = false },
+                                      copy: {
+                                          NSPasteboard.general.clearContents()
+                                          NSPasteboard.general.setString(model.text, forType: .string)
+                                          showSendCheck = false
+                                      })
+                    }
                 Button { exportFile() } label: { Image(systemName: "square.and.arrow.up") }.help("Export")
             }
             .padding(.horizontal, 24).padding(.vertical, 12)
@@ -267,5 +279,36 @@ struct GoalsSheet: View {
         case let x as Domain: x.label
         default: "\(v)"
         }
+    }
+}
+
+struct SendCheckView: View {
+    let warnings: [Proactive.SendWarning]
+    let fixAll: () -> Void
+    let copy: () -> Void
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if warnings.isEmpty {
+                Label("Ready to send", systemImage: "checkmark.seal.fill").font(.headline).foregroundStyle(.green)
+                Text("No mistakes, no missing attachments, and the tone looks fine.").font(.callout).foregroundStyle(.secondary)
+            } else {
+                Text("Before you send").font(.headline)
+                ForEach(warnings, id: \.title) { w in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(w.title).font(.callout.weight(.semibold))
+                            Text(w.detail).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+            HStack {
+                if warnings.contains(where: { $0.title.contains("correctness") }) { Button("Fix all", action: fixAll) }
+                Spacer()
+                Button("Copy text", action: copy).buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(16).frame(width: 340)
     }
 }

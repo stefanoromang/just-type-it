@@ -95,6 +95,7 @@ public sealed class SuggestionBadge : FloatingForm
 {
     int count;
     IssueGroup group;
+    string? tone;
     public event Action? Clicked;
 
     public SuggestionBadge()
@@ -105,9 +106,10 @@ public sealed class SuggestionBadge : FloatingForm
         Cursor = Cursors.Hand;
     }
 
-    public void Show(Rectangle field, int n, IssueGroup g)
+    public void Show(Rectangle field, int n, IssueGroup g, string? toneEmoji = null)
     {
-        count = n; group = g;
+        count = n; group = g; tone = toneEmoji;
+        Size = new Size(tone == null ? 28 : 58, 28);
         Location = new Point(field.Right - Width - 8, field.Bottom - Height - 8);
         Invalidate();
         ShowQuietly();
@@ -118,10 +120,19 @@ public sealed class SuggestionBadge : FloatingForm
     protected override void OnPaint(PaintEventArgs e)
     {
         e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-        using var b = new SolidBrush(group.Color());
-        e.Graphics.FillEllipse(b, 1, 1, Width - 3, Height - 3);
+        int x = 0;
+        if (tone != null)
+        {
+            using var bg = new SolidBrush(Color.FromArgb(245, 245, 245));
+            e.Graphics.FillEllipse(bg, 1, 1, 25, 25);
+            using var ef = new Font("Segoe UI Emoji", 10f);
+            TextRenderer.DrawText(e.Graphics, tone, ef, new Rectangle(0, 0, 28, 28), Color.Black, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            x = 30;
+        }
+        using var b = new SolidBrush(count == 0 ? Color.SeaGreen : group.Color());
+        e.Graphics.FillEllipse(b, x + 1, 1, 25, 25);
         using var f = new Font("Segoe UI", count > 9 ? 8f : 9.5f, FontStyle.Bold);
-        TextRenderer.DrawText(e.Graphics, count > 99 ? "99+" : count.ToString(), f, new Rectangle(0, 0, Width, Height), Color.White,
+        TextRenderer.DrawText(e.Graphics, count == 0 ? "✓" : count > 99 ? "99+" : count.ToString(), f, new Rectangle(x, 0, 28, 28), Color.White,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
     }
 }
@@ -187,17 +198,17 @@ public sealed class SummaryWindow : FloatingForm
 {
     static SummaryWindow? open;
 
-    public static void ShowFor(string app, List<Issue> issues, Func<Issue, Task<bool>> fix, Func<Task> fixAll)
+    public static void ShowFor(string app, List<Issue> issues, List<Proactive.SendWarning> warnings, Func<Issue, Task<bool>> fix, Func<Task> fixAll)
     {
         open?.Close();
-        open = new SummaryWindow(app, issues, fix, fixAll);
+        open = new SummaryWindow(app, issues, warnings, fix, fixAll);
         var cursor = Cursor.Position;
         var screen = Screen.FromPoint(cursor).WorkingArea;
         open.Location = new Point(Math.Max(screen.Left, Math.Min(cursor.X - open.Width + 20, screen.Right - open.Width)), Math.Max(screen.Top, cursor.Y - open.Height - 20));
         open.ShowQuietly();
     }
 
-    SummaryWindow(string app, List<Issue> issues, Func<Issue, Task<bool>> fix, Func<Task> fixAll)
+    SummaryWindow(string app, List<Issue> issues, List<Proactive.SendWarning> warnings, Func<Issue, Task<bool>> fix, Func<Task> fixAll)
     {
         Size = new Size(380, 420);
         BackColor = Color.White;
@@ -207,6 +218,10 @@ public sealed class SummaryWindow : FloatingForm
         close.Click += (_, _) => Close();
         header.Controls.Add(close);
         var list = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(8) };
+        foreach (var w in warnings)
+            list.Controls.Add(new Label { Text = $"⚠ {w.Title} · {w.Detail}", AutoSize = true, MaximumSize = new Size(340, 0), BackColor = Color.FromArgb(255, 243, 224), Padding = new Padding(6), Margin = new Padding(0, 0, 0, 6) });
+        if (issues.Count == 0)
+            list.Controls.Add(new Label { Text = "✓ No mistakes found", AutoSize = true, ForeColor = Color.SeaGreen, Font = new Font("Segoe UI", 10f, FontStyle.Bold), Padding = new Padding(4) });
         foreach (var i in issues.Take(60))
         {
             var row = new Panel { Width = 340, Height = 46, Margin = new Padding(0, 0, 0, 6), BackColor = Color.FromArgb(246, 246, 246) };

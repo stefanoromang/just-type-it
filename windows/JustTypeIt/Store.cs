@@ -19,6 +19,9 @@ public sealed class Prefs
     public List<string> PausedApps { get; set; } = new();
     public int FixesAccepted { get; set; }
     public bool Onboarded { get; set; }
+    public bool Autocorrect { get; set; } = true;
+    public bool ShowTone { get; set; } = true;
+    public bool PreSendCheck { get; set; } = true;
 }
 
 /// Settings and documents in %LOCALAPPDATA%\JustTypeIt. Nothing is sent anywhere.

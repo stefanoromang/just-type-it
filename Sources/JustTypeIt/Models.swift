@@ -168,6 +168,9 @@ struct Prefs: Codable {
     var checkEverywhere = true
     var aiEverywhere = true
     var onboarded = false
+    var autocorrect = true
+    var preSendCheck = true
+    var showTone = true
     var launchAtLogin = true
     var excludedApps: [String] = []
 
@@ -191,6 +194,9 @@ struct Prefs: Codable {
         checkEverywhere = (try? c.decode(Bool.self, forKey: .checkEverywhere)) ?? def.checkEverywhere
         aiEverywhere = (try? c.decode(Bool.self, forKey: .aiEverywhere)) ?? def.aiEverywhere
         onboarded = (try? c.decode(Bool.self, forKey: .onboarded)) ?? def.onboarded
+        autocorrect = (try? c.decode(Bool.self, forKey: .autocorrect)) ?? def.autocorrect
+        preSendCheck = (try? c.decode(Bool.self, forKey: .preSendCheck)) ?? def.preSendCheck
+        showTone = (try? c.decode(Bool.self, forKey: .showTone)) ?? def.showTone
         launchAtLogin = (try? c.decode(Bool.self, forKey: .launchAtLogin)) ?? def.launchAtLogin
         excludedApps = (try? c.decode([String].self, forKey: .excludedApps)) ?? def.excludedApps
     }

@@ -63,6 +63,10 @@ static class SelfTest
                 var rects = range?.GetBoundingRectangles() ?? Array.Empty<System.Windows.Rect>();
                 Record("Word positions for underlines", rects.Length > 0 && rects[0].Width > 0, rects.Length > 0 ? rects[0].ToString() : "none");
             }
+            // Autocorrect logic shared with the Mac app.
+            var ac = Proactive.Autocorrect("I think teh ", 12);
+            Record("Autocorrect logic", ac != null && ac.Replacement == "the" && Proactive.Autocorrect("I feel ill ", 11) == null);
+            Record("Pre-send warnings", Proactive.PreSendWarnings("Please see attached. This is unacceptable.", Array.Empty<Issue>()).Count == 2);
             try { p?.Kill(); } catch { }
             File.Delete(file);
         }

@@ -19,8 +19,11 @@ enum TextUtil {
         spans(text, unit: .paragraph)
     }
 
+    /// Fast word splitter (letters, digits, apostrophes and hyphens), exact UTF-16 offsets.
     static func words(_ text: String) -> [Span] {
-        spans(text, unit: .word)
+        matches("[\\p{L}\\p{N}][\\p{L}\\p{N}'’\\-]*", in: text, caseInsensitive: false).map {
+            Span(range: $0.range, text: substring(text, $0.range))
+        }
     }
 
     private static func spans(_ text: String, unit: NLTokenUnit) -> [Span] {
@@ -45,10 +48,21 @@ enum TextUtil {
 
     /// Regex matches (case-insensitive by default) with capture groups.
     static func matches(_ pattern: String, in text: String, caseInsensitive: Bool = true) -> [NSTextCheckingResult] {
-        guard let re = try? NSRegularExpression(pattern: pattern, options: caseInsensitive ? [.caseInsensitive] : []) else {
-            return []
-        }
+        guard let re = regex(pattern, caseInsensitive: caseInsensitive) else { return [] }
         return re.matches(in: text, range: NSRange(location: 0, length: (text as NSString).length))
+    }
+
+    /// Compiled patterns are cached: the checker runs hundreds of patterns on every keystroke pause.
+    nonisolated(unsafe) private static var cache: [String: NSRegularExpression] = [:]
+    private static let cacheLock = NSLock()
+
+    static func regex(_ pattern: String, caseInsensitive: Bool = true) -> NSRegularExpression? {
+        let key = (caseInsensitive ? "i:" : "c:") + pattern
+        cacheLock.lock(); defer { cacheLock.unlock() }
+        if let re = cache[key] { return re }
+        guard let re = try? NSRegularExpression(pattern: pattern, options: caseInsensitive ? [.caseInsensitive] : []) else { return nil }
+        cache[key] = re
+        return re
     }
 
     static func substring(_ text: String, _ r: NSRange) -> String {

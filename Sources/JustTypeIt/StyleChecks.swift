@@ -19,7 +19,7 @@ enum StyleChecks {
         if o.passive { out += passive(text) }
         if o.hedging { out += hedging(text) }
         if o.inclusive { out += inclusive(text) }
-        out += engagement(text, o)
+        out += engagement(text, o).filter { $0.kind != "Engagement/Repetition" && $0.kind != "Engagement/SentenceVariety" }
         if o.goals.formality == .formal || o.goals.domain == .academic || o.goals.domain == .business {
             out += phraseList(text, StyleData.informal, group: .delivery, kind: "Style/Formality/Informal", title: "Informal language") {
                 $1.isEmpty ? "“\($0)” is too casual for formal writing." : "“\($0)” is informal. In formal writing use “\($1)”."
@@ -41,8 +41,14 @@ enum StyleChecks {
             }
         }
         out += dialect(text, o.dialect)
-        if o.consistency { out += consistency(text) }
         out += styleGuide(text, o.styleRules)
+        return out
+    }
+
+    /// Checks that need the whole document: repeated words, monotonous sentence starts, consistency.
+    static func documentWide(_ text: String, _ o: CheckOptions) -> [Issue] {
+        var out = repetition(text, o)
+        if o.consistency { out += consistency(text) }
         return out
     }
 
@@ -185,11 +191,14 @@ enum StyleChecks {
                                     : "“\(w)” is overused and vague. A more precise word makes your writing more engaging."))
             }
         }
+        return out
+    }
+
+    static func repetition(_ text: String, _ o: CheckOptions) -> [Issue] {
+        var out: [Issue] = []
         // Repeated content words within a paragraph.
-        for p in TextUtil.paragraphs(text) {
+        for p in RuleEngine.lineParagraphs(text) {
             var counts: [String: [NSRange]] = [:]
-            let tagger = NLTagger(tagSchemes: [.lemma])
-            tagger.string = p.text
             for w in TextUtil.words(p.text) {
                 let l = w.text.lowercased()
                 guard l.count >= 4, !TextUtil.stopwords.contains(l), !o.dictionary.contains(l), l.allSatisfy(\.isLetter) else { continue }
@@ -205,7 +214,7 @@ enum StyleChecks {
                 }
             }
             // Sentence starts repeated.
-            let sents = TextUtil.sentences(p.text)
+            let sents = p.text.filter({ ".!?".contains($0) }).count >= 3 ? TextUtil.sentences(p.text) : []
             if sents.count >= 3 {
                 for i in 2..<sents.count {
                     let a = sents[i - 2].text.split(separator: " ").first?.lowercased()

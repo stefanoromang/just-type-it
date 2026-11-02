@@ -20,6 +20,15 @@ The checking happens **on your Mac**. It uses Apple's built-in spelling and gram
 
 ## Features
 
+### What's new in 1.2 — faster and more proactive
+- **15–20× faster checking.** Only the paragraph you're editing is re-checked; everything else is reused. Measured on an M-series Mac: a 120-word email checks in about 1 ms, a 700-word page in about 6 ms, and typing into a 2,800-word document costs about 26 ms per pause (it was 28 ms, 126 ms and 476 ms).
+- **Autocorrect as you type**, in every app. Obvious typos (*teh*, *recieved*, *dont*, *i*) are fixed once you pause, and the cursor stays where you were typing. Real words that look like typos (*ill*, *wont*, *cant*) are never auto-changed. Undo with ⌘Z / Ctrl+Z, or turn it off in Settings or the menu bar.
+- **Tone at a glance.** An emoji next to the suggestion badge shows how your message sounds (😀 friendly, 🎩 formal, 😟 worried…).
+- **Green check when you're good.** A clean text box shows a green ✓ badge, so you can see Just Type It is checking.
+- **Ready to send?** The suggestion panel and a toolbar button warn about mistakes, a mentioned attachment, harsh phrases (*per my last email*, *unacceptable*), words in capitals, and very long messages.
+- **Synonyms on double-click** in the editor, with one-click replacement.
+- Both Mac and Windows get these features, and they're covered by automated tests: the Mac self-test, the 40 Windows engine tests, and a live test that types into TextEdit.
+
 ### What's new in 1.1.1 — Outlook compatibility
 - **Outlook compose detection fixed.** Outlook hosts its message body in a separate WebKit process. The checker now resolves that text area through system focus or a bounded, cycle-safe search of the active compose window, rather than requiring Outlook's app-level focus to expose it.
 - **Verified corrections.** Outlook can report success without changing text. Corrections now verify the selected range, use paste for Outlook, and compare the entire resulting message with the expected text before counting a fix. The rest of the message and signature stay unchanged.
@@ -112,6 +121,9 @@ The checking happens **on your Mac**. It uses Apple's built-in spelling and gram
 | Check selected text in any app | ⌃⌥G | Ctrl+Alt+G |
 | Editor window with suggestions and scores | ✅ | ✅ |
 | Starts automatically, runs in the menu bar / system tray | ✅ | ✅ |
+| Autocorrect obvious typos as you type | ✅ | ✅ |
+| Tone emoji, green ✓ when clean, pre-send warnings | ✅ | ✅ |
+| Synonyms on double-click | ✅ (editor) | — |
 | AI rewrites, tone changes, agents, AI suggestions | ✅ Apple Intelligence | Not yet (needs an on-device model) |
 | Plagiarism check, AI detector, citations | ✅ | Not yet |
 

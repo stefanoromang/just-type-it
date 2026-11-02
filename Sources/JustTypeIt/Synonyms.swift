@@ -45,10 +45,15 @@ enum Synonyms {
         "support": ["help", "back", "assist"], "allow": ["let", "enable", "permit"],
     ]
 
+    nonisolated(unsafe) private static var cache: [String: [String]] = [:]
+
     static func lookup(_ word: String) -> [String] {
         let w = word.lowercased()
         if let s = table[w] { return s }
-        return systemThesaurus(w)
+        if let c = cache[w] { return c }
+        let found = systemThesaurus(w)
+        cache[w] = found
+        return found
     }
 
     /// Reads synonyms from the macOS thesaurus when available.

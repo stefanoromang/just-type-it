@@ -12,12 +12,47 @@ enum RuleEngine {
     static func check(_ text: String, options o: CheckOptions) -> [Issue] {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
         var issues: [Issue] = []
-        issues += systemCheck(text, o)
-        issues += patternRules(text, o)
-        issues += mechanics(text)
-        issues += structure(text)
-        issues += StyleChecks.run(text, o)
+        // Paragraph-local checks are cached per paragraph: while you type, only the edited
+        // paragraph is re-checked. Document-wide checks (repetition, consistency) run on the whole text.
+        for p in lineParagraphs(text) {
+            for var i in cachedLocal(p.text, o) {
+                i.range.location += p.range.location
+                issues.append(i)
+            }
+        }
+        issues += StyleChecks.documentWide(text, o)
         return dedupe(issues, text: text, o: o)
+    }
+
+    static func local(_ text: String, _ o: CheckOptions) -> [Issue] {
+        systemCheck(text, o) + patternRules(text, o) + mechanics(text) + structure(text) + StyleChecks.run(text, o)
+    }
+
+    nonisolated(unsafe) private static var paragraphCache: [String: [Issue]] = [:]
+    nonisolated(unsafe) private static var cacheKey = ""
+
+    private static func cachedLocal(_ p: String, _ o: CheckOptions) -> [Issue] {
+        let key = "\(o.dialect)|\(o.goals)|\(o.dictionary.sorted())|\(o.styleRules)|\(o.passive)\(o.inclusive)\(o.hedging)"
+        if key != cacheKey { paragraphCache.removeAll(); cacheKey = key }
+        if let hit = paragraphCache[p] { return hit.map { var i = $0; i.id = UUID(); return i } }
+        let found = local(p, o)
+        if paragraphCache.count > 2000 { paragraphCache.removeAll() }
+        paragraphCache[p] = found
+        return found
+    }
+
+    /// Splits on line breaks (cheap and stable, so offsets stay exact).
+    static func lineParagraphs(_ text: String) -> [Span] {
+        var out: [Span] = []
+        let ns = text as NSString
+        var start = 0
+        while start < ns.length {
+            let r = ns.range(of: "\n", range: NSRange(location: start, length: ns.length - start))
+            let end = r.location == NSNotFound ? ns.length : r.location
+            if end > start { out.append(Span(range: NSRange(location: start, length: end - start), text: ns.substring(with: NSRange(location: start, length: end - start)))) }
+            start = end + 1
+        }
+        return out
     }
 
     // MARK: macOS spelling & grammar
@@ -79,7 +114,7 @@ enum RuleEngine {
                 let orig = TextUtil.substring(text, m.range)
                 if o.dictionary.contains(orig.lowercased()) { continue }
                 var reps: [String] = []
-                if !rule.replacement.isEmpty, let re = try? NSRegularExpression(pattern: rule.pattern, options: rule.caseInsensitive ? [.caseInsensitive] : []) {
+                if !rule.replacement.isEmpty, let re = TextUtil.regex(rule.pattern, caseInsensitive: rule.caseInsensitive) {
                     var rep = Morph.resolve(re.replacementString(for: m, in: text, offset: 0, template: rule.replacement))
                     rep = TextUtil.matchCase(rep, like: orig)
                     if rep != orig { reps = [rep] } else { continue }
@@ -129,7 +164,7 @@ enum RuleEngine {
             var s = orig
             for (base, past) in pastTense {
                 let p = "\\b(he|she|it|i|we|they|you) \(base)\\b"
-                if let re = try? NSRegularExpression(pattern: p, options: .caseInsensitive) {
+                if let re = TextUtil.regex(p) {
                     s = re.stringByReplacingMatches(in: s, range: NSRange(location: 0, length: (s as NSString).length), withTemplate: "$1 \(past)")
                 }
             }

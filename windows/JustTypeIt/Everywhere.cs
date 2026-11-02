@@ -77,9 +77,14 @@ public sealed class Everywhere : IDisposable
             var read = await Task.Run(() => ReadFocused((int)pid));
             if (read == null) { element = null; HideAll(); return; }
             var (el, text, bounds) = read.Value;
-            if (element == null || !Automation.Compare(el, element)) { element = el; lastText = ""; checkedText = null; dismissedCard(); }
+            if (element == null || !Automation.Compare(el, element)) { element = el; lastText = ""; checkedText = null; autocorrected.Clear(); dismissedCard(); }
             CurrentApp = FriendlyName(proc);
-            if (text != lastText) { lastText = text; lastChange = DateTime.Now; overlay.HideCard(); }
+            if (text != lastText)
+            {
+                bool grew = text.Length > lastText.Length;
+                lastText = text; lastChange = DateTime.Now; overlay.HideCard();
+                if (grew && Store.Shared.Prefs.Autocorrect) ScheduleAutocorrect(el, text);
+            }
             if (checkedText != text && (DateTime.Now - lastChange).TotalMilliseconds > 450)
             {
                 checkedText = text;
@@ -90,11 +95,17 @@ public sealed class Everywhere : IDisposable
                 issues = found.Where(i => !dismissed.Contains(i.Key) && i.Kind is not "Engagement/Repetition" and not "Style/Clarity/LongSentence").ToList();
                 Changed?.Invoke();
             }
-            if (issues.Count == 0) { overlay.Hide(); badge.Hide(); return; }
+            var tone = Store.Shared.Prefs.ShowTone ? Proactive.ToneEmoji(text) : null;
+            if (issues.Count == 0)
+            {
+                overlay.Hide();
+                if (checkedText == text) badge.Show(bounds, 0, IssueGroup.Correctness, tone); else badge.Hide();
+                return;
+            }
             var snapshot = issues.ToList();
             marks = await Task.Run(() => Measure(el, text, snapshot, bounds));
             overlay.Show(bounds, marks);
-            badge.Show(bounds, issues.Count, issues.Any(i => i.Group == IssueGroup.Correctness) ? IssueGroup.Correctness : issues[0].Group);
+            badge.Show(bounds, issues.Count, issues.Any(i => i.Group == IssueGroup.Correctness) ? IssueGroup.Correctness : issues[0].Group, tone);
         }
         catch { }
         finally { busy = false; }
@@ -210,7 +221,52 @@ public sealed class Everywhere : IDisposable
         checkedText = null;
     });
 
-    void ShowSummary() => SummaryWindow.ShowFor(CurrentApp, issues, i => Apply(i, i.Replacements.FirstOrDefault() ?? ""), FixAll);
+    void ShowSummary() => SummaryWindow.ShowFor(CurrentApp, issues,
+        Store.Shared.Prefs.PreSendCheck ? Proactive.PreSendWarnings(lastText, issues).Where(w => !w.Title.Contains("correctness")).ToList() : new(),
+        i => Apply(i, i.Replacements.FirstOrDefault() ?? ""), FixAll);
+
+    CancellationTokenSource? autocorrectCts;
+    readonly HashSet<int> autocorrected = new();
+
+    /// After a short pause in typing, fixes obvious typos in the words just finished (Ctrl+Z undoes it).
+    void ScheduleAutocorrect(AutomationElement el, string text)
+    {
+        autocorrectCts?.Cancel();
+        var cts = autocorrectCts = new CancellationTokenSource();
+        _ = Task.Delay(450, cts.Token).ContinueWith(async t =>
+        {
+            if (t.IsCanceled || lastText != text || applying) return;
+            int caret = await Task.Run(() => Caret(el, text));
+            if (caret < 0) return;
+            var dict = new HashSet<string>(Store.Shared.Prefs.Dictionary.Select(w => w.ToLowerInvariant()));
+            var fixes = new List<Proactive.Correction>();
+            for (int i = caret; i > Math.Max(0, caret - 60); i--)
+            {
+                var f = Proactive.Autocorrect(text, i, dict);
+                if (f != null && !autocorrected.Contains(f.Start) && !fixes.Any(x => x.Start == f.Start)) fixes.Add(f);
+            }
+            foreach (var f in fixes.OrderByDescending(f => f.Start))
+            {
+                autocorrected.Add(f.Start);
+                var issue = new Issue { Start = f.Start, Length = f.Length, Original = f.Original, Replacements = new() { f.Replacement }, Kind = "Autocorrect" };
+                if (!await Apply(issue, f.Replacement, restoreCaret: true)) break;
+            }
+        }, TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
+    static int Caret(AutomationElement el, string text)
+    {
+        try
+        {
+            if (!el.TryGetCurrentPattern(TextPattern.Pattern, out var tp)) return -1;
+            var sel = ((TextPattern)tp).GetSelection();
+            if (sel.Length == 0) return -1;
+            var before = ((TextPattern)tp).DocumentRange.Clone();
+            before.MoveEndpointByRange(TextPatternRangeEndpoint.End, sel[0], TextPatternRangeEndpoint.Start);
+            return before.GetText(-1).Replace("\r\n", "\n").Replace('\r', '\n').Length;
+        }
+        catch { return -1; }
+    }
 
     void Dismiss(Issue i)
     {
@@ -227,7 +283,7 @@ public sealed class Everywhere : IDisposable
     }
 
     /// Replaces the flagged text inside the other app, then verifies the result.
-    public async Task<bool> Apply(Issue issue, string replacement)
+    public async Task<bool> Apply(Issue issue, string replacement, bool restoreCaret = false)
     {
         if (applying || element == null) return false;
         applying = true;
@@ -259,6 +315,22 @@ public sealed class Everywhere : IDisposable
                 var now = await Task.Run(() => ReadText(el));
                 if (now == expected)
                 {
+                    if (restoreCaret)
+                    {
+                        // Put the cursor back at the end of what the user typed.
+                        await Task.Run(() =>
+                        {
+                            try
+                            {
+                                if (el.TryGetCurrentPattern(TextPattern.Pattern, out var tp2))
+                                {
+                                    var end = RangeFor((TextPattern)tp2, now, now.Length, 0);
+                                    end?.Select();
+                                }
+                            }
+                            catch { }
+                        });
+                    }
                     Store.Shared.Prefs.FixesAccepted++;
                     Store.Shared.Save();
                     issues.Remove(issue);

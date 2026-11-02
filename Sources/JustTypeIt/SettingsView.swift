@@ -102,6 +102,9 @@ struct SettingsView: View {
                     v ? Everywhere.shared.start() : Everywhere.shared.stop()
                 }))
                 Toggle("AI suggestions in other apps (Apple Intelligence, on-device)", isOn: $store.prefs.aiEverywhere)
+                Toggle("Autocorrect obvious typos as you type (teh → the, dont → don't). ⌘Z undoes it.", isOn: $store.prefs.autocorrect)
+                Toggle("Show tone emoji next to the suggestion badge", isOn: $store.prefs.showTone)
+                Toggle("Warn before sending (missing attachment, harsh tone, long message)", isOn: $store.prefs.preSendCheck)
                 Toggle("Launch at login (always running in the menu bar)", isOn: Binding(get: { store.prefs.launchAtLogin }, set: { v in
                     store.prefs.launchAtLogin = v
                     LoginItem.set(v)

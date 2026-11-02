@@ -19,6 +19,19 @@ final class Store: ObservableObject {
         var wordsChecked = 0
         var acceptedByGroup: [String: Int] = [:]
         var mistakesByKind: [String: Int] = [:]
+        var autocorrections = 0
+
+        init() {}
+
+        init(from d: Decoder) throws {
+            let c = try d.container(keyedBy: CodingKeys.self)
+            suggestionsAccepted = (try? c.decode(Int.self, forKey: .suggestionsAccepted)) ?? 0
+            suggestionsDismissed = (try? c.decode(Int.self, forKey: .suggestionsDismissed)) ?? 0
+            wordsChecked = (try? c.decode(Int.self, forKey: .wordsChecked)) ?? 0
+            acceptedByGroup = (try? c.decode([String: Int].self, forKey: .acceptedByGroup)) ?? [:]
+            mistakesByKind = (try? c.decode([String: Int].self, forKey: .mistakesByKind)) ?? [:]
+            autocorrections = (try? c.decode(Int.self, forKey: .autocorrections)) ?? 0
+        }
     }
 
     private let dir: URL

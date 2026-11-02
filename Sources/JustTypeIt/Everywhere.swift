@@ -150,14 +150,17 @@ final class Everywhere: ObservableObject {
             checkedText = nil
             issues = []
             aiIssues = []
+            autocorrected = []
             aiTask?.cancel()
             card.orderOut(nil)
         }
         guard let full = string(el, kAXValueAttribute) else { hideAll(); return }
         if full != lastText {
+            let grew = (full as NSString).length > (lastText as NSString).length
             lastText = full
             lastEdit = Date()
             card.orderOut(nil)
+            if grew, Store.shared.prefs.autocorrect { autocorrectRecent(full, in: el) }
         }
         // Check after a short pause in typing; AI looks at the current paragraph after a longer pause.
         if checkedText != full, Date().timeIntervalSince(lastEdit) > 0.45 {
@@ -275,8 +278,11 @@ final class Everywhere: ObservableObject {
     private func layout(_ el: AXUIElement) {
         guard !issues.isEmpty, lastText == checkedText else {
             overlay.orderOut(nil)
-            if issues.isEmpty { badge.orderOut(nil) }
             issueCount = issues.count
+            // A clean text box gets a small green check, so you can see Just Type It is watching.
+            if issues.isEmpty, lastText == checkedText, TextUtil.wordCount(lastText) >= 3, let frame = elementFrame(el) {
+                badge.show(count: 0, worst: .correctness, tone: Store.shared.prefs.showTone ? Proactive.toneEmoji(lastText)?.emoji : nil, near: frame)
+            } else if issues.isEmpty { badge.orderOut(nil) }
             return
         }
         guard let frame = elementFrame(el) else { hideAll(); return }
@@ -298,7 +304,8 @@ final class Everywhere: ObservableObject {
         rects = out
         issueCount = issues.count
         if out.isEmpty { overlay.orderOut(nil) } else { overlay.show(frame: frame, marks: out.map { ($0.0.group.nsColor, $0.1, $0.0.range.length > 40) }) }
-        badge.show(count: issues.count, worst: issues.contains { $0.group == .correctness } ? IssueGroup.correctness : (issues.first?.group ?? .clarity), near: frame)
+        badge.show(count: issues.count, worst: issues.contains { $0.group == .correctness } ? IssueGroup.correctness : (issues.first?.group ?? .clarity),
+                   tone: Store.shared.prefs.showTone ? Proactive.toneEmoji(lastText)?.emoji : nil, near: frame)
     }
 
     private func elementFrame(_ el: AXUIElement) -> NSRect? {
@@ -378,7 +385,7 @@ final class Everywhere: ObservableObject {
     func showAllFromBadge() {
         card.orderOut(nil)
         if summary.isVisible { summary.orderOut(nil); return }
-        let view = EverywhereSummary(issues: issues, app: currentApp, aiWorking: aiWorking,
+        let view = EverywhereSummary(issues: issues, text: lastText, app: currentApp, aiWorking: aiWorking,
                                      apply: { [weak self] i in self?.apply(i, i.replacements.first ?? ""); self?.refreshSummary() },
                                      show: { [weak self] i in
                                          guard let self else { return }
@@ -457,6 +464,61 @@ final class Everywhere: ObservableObject {
     /// Replaces the flagged text inside the other app.
     private func apply(_ issue: Issue, _ replacement: String) {
         Task { @MainActor in _ = await applyCorrection(issue, replacement) }
+    }
+
+    @Published private(set) var lastAutocorrect: Proactive.Correction?
+
+    private var autocorrected: Set<Int> = []
+
+    /// Fixes obvious typos in the words just finished before the cursor (fast typists can finish
+    /// several words between two checks). Undo with ⌘Z.
+    private func autocorrectRecent(_ full: String, in el: AXUIElement) {
+        guard !applyingCorrection, let caret = selectedRange(el)?.location else { return }
+        let ns = full as NSString
+        let dict = Set(Store.shared.prefs.dictionary.map { $0.lowercased() })
+        // Look at word boundaries in the last 60 characters before the caret, nearest last.
+        let from = max(0, caret - 60)
+        var fixes: [Proactive.Correction] = []
+        for i in stride(from: caret, to: from, by: -1) where i <= ns.length {
+            guard let f = Proactive.autocorrect(full, caret: i, dictionary: dict), !autocorrected.contains(f.range.location) else { continue }
+            if !fixes.contains(where: { $0.range.location == f.range.location }) { fixes.append(f) }
+        }
+        guard !fixes.isEmpty else { return }
+        pendingAutocorrect?.cancel()
+        // Wait for a short pause in typing so a correction never lands in the middle of a keystroke.
+        pendingAutocorrect = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            guard let self, !Task.isCancelled, self.lastText == full, self.string(el, kAXValueAttribute) == full,
+                  self.selectedRange(el)?.location == caret else { return }
+            // Apply every finished typo from the end backwards so earlier offsets stay valid.
+            var snapshot = full
+            var caretNow = caret
+            for fix in fixes.sorted(by: { $0.range.location > $1.range.location }) {
+                guard await self.applyAutocorrect(fix, in: el, snapshot: snapshot, caret: caretNow) else { break }
+                snapshot = self.string(el, kAXValueAttribute) ?? snapshot
+                caretNow += (fix.replacement as NSString).length - fix.range.length
+            }
+        }
+    }
+
+    private var pendingAutocorrect: Task<Void, Never>?
+
+    private func applyAutocorrect(_ fix: Proactive.Correction, in el: AXUIElement, snapshot: String, caret: Int) async -> Bool {
+        applyingCorrection = true
+        defer { applyingCorrection = false }
+        let ok = await AccessibilityEdit.apply(editor: el, appPID: pid, bundleID: bundleID, snapshot: snapshot,
+                                                range: fix.range, original: fix.original, replacement: fix.replacement)
+        autocorrected.insert(fix.range.location)
+        guard ok else { return false }
+        let delta = (fix.replacement as NSString).length - fix.range.length
+        var cf = CFRange(location: caret + delta, length: 0)
+        if let v = AXValueCreate(.cfRange, &cf) { AXUIElementSetAttributeValue(el, kAXSelectedTextRangeAttribute as CFString, v) }
+        lastAutocorrect = fix
+        Store.shared.stats.autocorrections += 1
+        lastText = string(el, kAXValueAttribute) ?? lastText
+        lastEdit = Date()
+        checkedText = nil
+        return true
     }
 
     private func applyCorrection(_ issue: Issue, _ replacement: String) async -> Bool {
@@ -575,20 +637,24 @@ final class BadgePanel: FloatingPanel {
     private var count = -1
     private var group: IssueGroup = .correctness
 
-    func show(count: Int, worst: IssueGroup, near frame: NSRect) {
+    private var tone: String?
+
+    func show(count: Int, worst: IssueGroup, tone: String? = nil, near frame: NSRect) {
         let size: CGFloat = 26
-        var origin = NSPoint(x: frame.maxX - size - 6, y: frame.minY + 6)
+        let width: CGFloat = tone == nil ? size : size * 2 + 2
+        var origin = NSPoint(x: frame.maxX - width - 6, y: frame.minY + 6)
         if frame.height > 400 { origin.y = max(frame.minY + 6, frame.minY + 6) }
-        if count != self.count || worst != group {
+        if count != self.count || worst != group || tone != self.tone {
             self.count = count
             group = worst
-            let v = FirstMouseHostingView(rootView: BadgeView(count: count, color: worst.color) {
+            self.tone = tone
+            let v = FirstMouseHostingView(rootView: BadgeView(count: count, color: worst.color, tone: tone) {
                 MainActor.assumeIsolated { Everywhere.shared.showAllFromBadge() }
             })
-            v.frame = NSRect(x: 0, y: 0, width: size, height: size)
+            v.frame = NSRect(x: 0, y: 0, width: width, height: size)
             contentView = v
         }
-        let f = NSRect(origin: origin, size: NSSize(width: size, height: size))
+        let f = NSRect(origin: origin, size: NSSize(width: width, height: size))
         if self.frame != f { setFrame(f, display: true) }
         if !isVisible { orderFrontRegardless() }
     }
@@ -597,12 +663,20 @@ final class BadgePanel: FloatingPanel {
 struct BadgeView: View {
     let count: Int
     let color: Color
+    var tone: String? = nil
     let action: () -> Void
     var body: some View {
         Button(action: action) {
-            ZStack {
-                Circle().fill(color)
-                Text(count > 99 ? "99+" : "\(count)").font(.system(size: count > 9 ? 10 : 12, weight: .bold)).foregroundStyle(.white)
+            HStack(spacing: 2) {
+                if let tone {
+                    ZStack { Circle().fill(.regularMaterial); Text(tone).font(.system(size: 13)) }
+                        .help("Your tone")
+                }
+                ZStack {
+                    Circle().fill(count == 0 ? Color.green : color)
+                    if count == 0 { Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(.white) }
+                    else { Text(count > 99 ? "99+" : "\(count)").font(.system(size: count > 9 ? 10 : 12, weight: .bold)).foregroundStyle(.white) }
+                }
             }
         }
         .buttonStyle(.plain)
@@ -695,6 +769,7 @@ struct EverywhereCard: View {
 
 struct EverywhereSummary: View {
     let issues: [Issue]
+    var text: String = ""
     let app: String
     let aiWorking: Bool
     let apply: (Issue) -> Void
@@ -724,6 +799,20 @@ struct EverywhereSummary: View {
                     .background(RoundedRectangle(cornerRadius: 6).fill(g.color.opacity(n > 0 ? 0.15 : 0.04)))
                     .foregroundStyle(n > 0 ? g.color : .secondary)
                 }
+            }
+            let warnings = Store.shared.prefs.preSendCheck ? Proactive.preSendWarnings(text, issues: issues).filter { !$0.title.contains("correctness") } : []
+            if !warnings.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(warnings, id: \.title) { w in
+                        Label { Text(w.title).font(.caption.weight(.semibold)) + Text(" · " + w.detail).font(.caption) } icon: {
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                        }
+                    }
+                }
+                .padding(8).background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.1)))
+            }
+            if issues.isEmpty {
+                Label("No mistakes found", systemImage: "checkmark.seal.fill").foregroundStyle(.green).padding(.vertical, 6)
             }
             ScrollView {
                 VStack(spacing: 6) {
