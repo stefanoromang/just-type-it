@@ -22,6 +22,7 @@ public sealed class Prefs
     public bool Autocorrect { get; set; } = true;
     public bool ShowTone { get; set; } = true;
     public bool PreSendCheck { get; set; } = true;
+    public int Rewrites { get; set; }
 }
 
 /// Settings and documents in %LOCALAPPDATA%\JustTypeIt. Nothing is sent anywhere.

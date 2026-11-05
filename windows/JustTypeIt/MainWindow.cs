@@ -33,6 +33,7 @@ public sealed class MainWindow : Form
         AddButton("Save as…", SaveFile);
         AddButton("Copy all", () => { if (editor.TextLength > 0) Clipboard.SetText(editor.Text); });
         AddButton("Accept all", AcceptAll);
+        AddButton("Rewrite…", RewriteSelection);
         toolbar.Controls.Add(new Label { Text = "  English:", AutoSize = true, Padding = new Padding(0, 6, 0, 0) });
         dialect.Items.AddRange(Enum.GetNames<Dialect>());
         dialect.SelectedItem = Store.Shared.Prefs.Dialect.ToString();
@@ -165,6 +166,26 @@ public sealed class MainWindow : Form
         }
         editor.Text = text;
         Recheck();
+    }
+
+    async void RewriteSelection()
+    {
+        var src = editor.SelectionLength > 0 ? editor.SelectedText : editor.Text;
+        if (src.Trim().Length == 0) return;
+        var menu = new ContextMenuStrip();
+        foreach (var m in Enum.GetValues<RewriteMode>())
+        {
+            var mode = m;
+            menu.Items.Add(m.Label(), null, async (_, _) =>
+            {
+                var v = await Rewriter.Versions(src.Replace("\r\n", "\n"), mode, count: 1, options: Store.Shared.Options());
+                if (v.Count == 0) { MessageBox.Show(mode.WorksOffline() ? "No changes needed." : "This style needs a local AI model (install Ollama).", "Just Type It"); return; }
+                if (editor.SelectionLength == 0) editor.SelectAll();
+                editor.SelectedText = v[0];
+            });
+        }
+        menu.Show(Cursor.Position);
+        await Task.CompletedTask;
     }
 
     void OpenFile()

@@ -20,6 +20,14 @@ The checking happens **on your Mac**. It uses Apple's built-in spelling and gram
 
 ## Features
 
+### What's new in 1.3 — rewrite anything, anywhere
+- **Rewrite highlighted text in any app.** Highlight text in Outlook, Word, Excel, Gmail, Notes or anywhere else, then press **⌃⌥R** (Mac) / **Ctrl+Alt+R** (Windows) or click the ✨ button that appears next to the selection. Choose a style and pick from up to three versions; changes are highlighted, you can edit the result, and **Replace** puts it back exactly where the selection was.
+- **17 styles:** Improve it, More professional, More casual, Shorter, Longer, More enthusiastic, Friendlier, More confident, Clearer, Simpler, More formal, More diplomatic, More persuasive, Fix grammar only, Bullet points, Summarize, Write a reply. You can also type your own instruction (“make it sound like a thank-you note”).
+- On Mac, rewrites use Apple Intelligence on your Mac. On Windows, they use a free local model through [Ollama](https://ollama.com) if you install it; without it, Fix grammar, Improve, Professional, Formal, Casual, Shorter, Clearer and Confident still work with the built-in rules.
+- **Tested in real apps on a Mac:** live grammar checking and rewriting were verified in Notes, Microsoft Word, Microsoft Excel (while editing a cell), Safari and Chrome (Gmail-style compose boxes), TextEdit, Teams and Outlook.
+- Days, months and languages typed in lowercase (*thursday*, *january*) are flagged as capitalization, not spelling.
+- The clipboard is fully restored after Quick Check and Rewrite, including images and rich text.
+
 ### What's new in 1.2 — faster and more proactive
 - **15–20× faster checking.** Only the paragraph you're editing is re-checked; everything else is reused. Measured on an M-series Mac: a 120-word email checks in about 1 ms, a 700-word page in about 6 ms, and typing into a 2,800-word document costs about 26 ms per pause (it was 28 ms, 126 ms and 476 ms).
 - **Autocorrect as you type**, in every app. Obvious typos (*teh*, *recieved*, *dont*, *i*) are fixed once you pause, and the cursor stays where you were typing. Real words that look like typos (*ill*, *wont*, *cant*) are never auto-changed. Undo with ⌘Z / Ctrl+Z, or turn it off in Settings or the menu bar.
@@ -119,12 +127,14 @@ The checking happens **on your Mac**. It uses Apple's built-in spelling and gram
 | Spelling | macOS spell checker | Windows spell checker (same one Office uses) |
 | Clarity, tone, inclusive language, dialects, scores | ✅ | ✅ |
 | Check selected text in any app | ⌃⌥G | Ctrl+Alt+G |
+| Rewrite highlighted text in any app (17 styles, up to 3 versions) | ⌃⌥R or ✨ button | Ctrl+Alt+R |
 | Editor window with suggestions and scores | ✅ | ✅ |
 | Starts automatically, runs in the menu bar / system tray | ✅ | ✅ |
 | Autocorrect obvious typos as you type | ✅ | ✅ |
 | Tone emoji, green ✓ when clean, pre-send warnings | ✅ | ✅ |
 | Synonyms on double-click | ✅ (editor) | — |
-| AI rewrites, tone changes, agents, AI suggestions | ✅ Apple Intelligence | Not yet (needs an on-device model) |
+| AI rewrites in every style | ✅ Apple Intelligence | ✅ with Ollama (free, local); 8 styles work without it |
+| AI agents, AI suggestions while typing | ✅ Apple Intelligence | Not yet |
 | Plagiarism check, AI detector, citations | ✅ | Not yet |
 
 Both apps use the same rule data, exported from the Mac sources to `windows/JustTypeIt.Core/rules.json`, and the same test sets. Both catch 64 out of 64 errors in `Tests/error-corpus.txt`.

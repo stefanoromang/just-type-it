@@ -58,6 +58,12 @@ enum AIEngine {
         return t.replacingOccurrences(of: "<<<", with: "").replacingOccurrences(of: ">>>", with: "")
     }
 
+    /// Removes "[Your Name]"-style placeholders the model sometimes adds.
+    static func removePlaceholdersForReplies(_ s: String) -> String {
+        s.replacingOccurrences(of: "\\[[A-Z][A-Za-z ]{1,24}\\]", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "[ \\t]+\n", with: "\n", options: .regularExpression)
+    }
+
     static func goalsLine(_ g: Goals, brand: String) -> String {
         var s = "Writing goals – \(g.summary)."
         if !brand.isEmpty { s += " Brand voice: \(brand)." }

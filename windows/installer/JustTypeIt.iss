@@ -3,7 +3,7 @@
 ; https://github.com/stefanoromang/just-type-it
 
 #define AppName "Just Type It"
-#define AppVersion "1.2.0"
+#define AppVersion "1.3.0"
 #define AppPublisher "Stefano Roman Gunness"
 #define AppURL "https://github.com/stefanoromang/just-type-it"
 #define AppExe "JustTypeIt.exe"

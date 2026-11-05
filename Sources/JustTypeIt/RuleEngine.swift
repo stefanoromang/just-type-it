@@ -80,12 +80,15 @@ enum RuleEngine {
                 let before = r.range.location >= 1 ? ns.substring(with: NSRange(location: r.range.location - 1, length: 1)) : ""
                 if dotted || before == "." || word.dropLast().contains(".") || word.dropFirst().contains(where: \.isUppercase) { continue }
                 let guesses = sc.guesses(forWordRange: r.range, in: text, language: lang, inSpellDocumentWithTag: 0) ?? []
-                let missingApostrophe = guesses.first.map { $0.replacingOccurrences(of: "'", with: "").lowercased() == word.lowercased() } ?? false
+                let first = guesses.first ?? ""
+                let missingApostrophe = first.contains("'") && first.replacingOccurrences(of: "'", with: "").lowercased() == word.lowercased()
+                let capitalization = !missingApostrophe && first.lowercased() == word.lowercased() && first != word
                 out.append(Issue(range: r.range, original: word, replacements: Array(guesses.prefix(4)),
-                                 group: .correctness, kind: missingApostrophe ? "Punctuation/Apostrophe" : "Spelling/Misspelled",
-                                 title: missingApostrophe ? "Missing apostrophe" : "Spelling",
+                                 group: .correctness, kind: missingApostrophe ? "Punctuation/Apostrophe" : capitalization ? "Grammar/Capitalization" : "Spelling/Misspelled",
+                                 title: missingApostrophe ? "Missing apostrophe" : capitalization ? "Capitalization" : "Spelling",
                                  explanation: missingApostrophe
                                     ? "Contractions need an apostrophe where letters are left out."
+                                    : capitalization ? "“\(first)” is a proper noun and is always capitalized."
                                     : "“\(word)” isn't in the \(o.dialect.label) dictionary. If it's a name or term you use, add it to your dictionary.",
                                  source: .system))
             } else if r.resultType == .grammar {

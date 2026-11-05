@@ -171,6 +171,7 @@ struct Prefs: Codable {
     var autocorrect = true
     var preSendCheck = true
     var showTone = true
+    var rewriteButton = true
     var launchAtLogin = true
     var excludedApps: [String] = []
 
@@ -197,6 +198,7 @@ struct Prefs: Codable {
         autocorrect = (try? c.decode(Bool.self, forKey: .autocorrect)) ?? def.autocorrect
         preSendCheck = (try? c.decode(Bool.self, forKey: .preSendCheck)) ?? def.preSendCheck
         showTone = (try? c.decode(Bool.self, forKey: .showTone)) ?? def.showTone
+        rewriteButton = (try? c.decode(Bool.self, forKey: .rewriteButton)) ?? def.rewriteButton
         launchAtLogin = (try? c.decode(Bool.self, forKey: .launchAtLogin)) ?? def.launchAtLogin
         excludedApps = (try? c.decode([String].self, forKey: .excludedApps)) ?? def.excludedApps
     }

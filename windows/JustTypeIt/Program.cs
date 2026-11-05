@@ -61,6 +61,7 @@ sealed class TrayApp : ApplicationContext
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Open Just Type It", null, (_, _) => ShowWindow());
         menu.Items.Add("Check selected text  (Ctrl+Alt+G)", null, (_, _) => QuickCheck.Run());
+        menu.Items.Add("Rewrite selected text  (Ctrl+Alt+R)", null, (_, _) => RewriteWindow.Run());
         var everywhere = new ToolStripMenuItem("Check in all apps") { Checked = Store.Shared.Prefs.CheckEverywhere, CheckOnClick = true };
         everywhere.CheckedChanged += (_, _) =>
         {
@@ -94,13 +95,14 @@ sealed class TrayApp : ApplicationContext
         };
         tray.ContextMenuStrip = menu;
         tray.DoubleClick += (_, _) => ShowWindow();
-        hotkeys.Register(QuickCheck.Run);
+        hotkeys.Register(1, Keys.G, QuickCheck.Run);
+        hotkeys.Register(2, Keys.R, RewriteWindow.Run);
         Program.SetStartWithWindows(Store.Shared.Prefs.StartWithWindows);
         if (Store.Shared.Prefs.CheckEverywhere) Everywhere.Shared.Start();
         if (showWindow) ShowWindow();
         if (!Store.Shared.Prefs.Onboarded)
         {
-            tray.ShowBalloonTip(6000, "Just Type It is running", "Type in Outlook, Word, Teams or Chrome and mistakes are underlined. Select text and press Ctrl+Alt+G to check it.", ToolTipIcon.Info);
+            tray.ShowBalloonTip(6000, "Just Type It is running", "Type in Outlook, Word, Teams or Chrome and mistakes are underlined. Highlight text and press Ctrl+Alt+R to rewrite it.", ToolTipIcon.Info);
             Store.Shared.Prefs.Onboarded = true; Store.Shared.Save();
         }
     }
@@ -120,20 +122,20 @@ sealed class TrayApp : ApplicationContext
     }
 }
 
-/// Global Ctrl+Alt+G hotkey.
+/// Global hotkeys: Ctrl+Alt+G (check selection) and Ctrl+Alt+R (rewrite selection).
 sealed class HotkeyWindow : NativeWindow, IDisposable
 {
     [DllImport("user32.dll")] static extern bool RegisterHotKey(IntPtr h, int id, uint mods, uint vk);
     [DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr h, int id);
-    Action? action;
+    readonly Dictionary<int, Action> actions = new();
     public HotkeyWindow() => CreateHandle(new CreateParams());
-    public void Register(Action a) { action = a; RegisterHotKey(Handle, 1, 0x0001 | 0x0002 | 0x4000, (uint)Keys.G); }
+    public void Register(int id, Keys key, Action a) { actions[id] = a; RegisterHotKey(Handle, id, 0x0001 | 0x0002 | 0x4000, (uint)key); }
     protected override void WndProc(ref Message m)
     {
-        if (m.Msg == 0x0312) action?.Invoke();
+        if (m.Msg == 0x0312 && actions.TryGetValue((int)m.WParam, out var a)) a();
         base.WndProc(ref m);
     }
-    public void Dispose() { UnregisterHotKey(Handle, 1); DestroyHandle(); }
+    public void Dispose() { foreach (var id in actions.Keys) UnregisterHotKey(Handle, id); DestroyHandle(); }
 }
 
 /// Ctrl+Alt+G: copies the selection from any app, shows suggestions, pastes the fixed text back.

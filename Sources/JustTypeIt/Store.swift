@@ -20,6 +20,7 @@ final class Store: ObservableObject {
         var acceptedByGroup: [String: Int] = [:]
         var mistakesByKind: [String: Int] = [:]
         var autocorrections = 0
+        var rewrites = 0
 
         init() {}
 
@@ -31,6 +32,7 @@ final class Store: ObservableObject {
             acceptedByGroup = (try? c.decode([String: Int].self, forKey: .acceptedByGroup)) ?? [:]
             mistakesByKind = (try? c.decode([String: Int].self, forKey: .mistakesByKind)) ?? [:]
             autocorrections = (try? c.decode(Int.self, forKey: .autocorrections)) ?? 0
+            rewrites = (try? c.decode(Int.self, forKey: .rewrites)) ?? 0
         }
     }
 

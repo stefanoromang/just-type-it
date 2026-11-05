@@ -66,7 +66,37 @@ enum SelfTest {
         return 0
     }
 
+    /// Tests every rewrite style with Apple Intelligence (and the offline fallback).
+    static func rewriteTest() -> Int32 {
+        let text = "hey so i think maybe we should probably move the meeting to thursday because alot of people cant make it on tuesday, let me know what u think"
+        var fails = 0
+        let sema = DispatchSemaphore(value: 0)
+        Task { @MainActor in
+            for mode in RewriteMode.allCases {
+                let t0 = Date()
+                let v = await Rewriter.versions(of: text, mode: mode, count: mode == .professional ? 3 : 1)
+                let ok = !v.isEmpty && v.allSatisfy { !$0.isEmpty && $0 != text && !$0.contains("[") }
+                if !ok { fails += 1 }
+                print(ok ? "PASS" : "FAIL", String(format: "%-18@ %.1fs  versions=%d  → %@", mode.label as NSString, Date().timeIntervalSince(t0), v.count, (v.first ?? "-").replacingOccurrences(of: "\n", with: " ⏎ ").prefix(150) as CVarArg))
+            }
+            for mode in [RewriteMode.grammarOnly, .shorter, .confident] {
+                let r = Rewriter.offline(text, mode: mode) ?? ""
+                let ok = !r.isEmpty && r.contains("a lot") && r.contains("can't")
+                if !ok { fails += 1 }
+                print(ok ? "PASS" : "FAIL", "offline", mode.label, "→", r.prefix(140))
+            }
+            let custom = await Rewriter.versions(of: text, mode: .improve, custom: "make it sound like a pirate", count: 1)
+            if custom.isEmpty { fails += 1 }
+            print(custom.isEmpty ? "FAIL" : "PASS", "custom instruction →", custom.first?.prefix(140) ?? "-")
+            sema.signal()
+        }
+        while sema.wait(timeout: .now()) == .timedOut { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
+        print(fails == 0 ? "REWRITE: ALL PASS" : "REWRITE: \(fails) FAILED")
+        return fails == 0 ? 0 : 1
+    }
+
     static func run() -> Int32 {
+        if CommandLine.arguments.contains("--rewrite") { return rewriteTest() }
         if CommandLine.arguments.contains("--benchmark") { return benchmark() }
         if let i = CommandLine.arguments.firstIndex(of: "--export-rules"), i + 1 < CommandLine.arguments.count {
             return exportRules(CommandLine.arguments[i + 1])

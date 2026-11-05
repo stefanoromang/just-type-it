@@ -18,6 +18,7 @@ public static class RuleEngine
         var issues = new List<Issue>();
         if (o.Spelling != null) issues.AddRange(Spelling(text, o));
         issues.AddRange(CommonMisspellings(text, o));
+        issues.AddRange(ProperNouns(text));
         issues.AddRange(PatternRules(text, o));
         issues.AddRange(Mechanics(text));
         issues.AddRange(Structure(text));
@@ -41,13 +42,29 @@ public static class RuleEngine
             if (word.Skip(1).Any(char.IsUpper)) continue; // iPhone, GitHub, camelCase
             int end = start + length;
             if ((end + 1 < text.Length && text[end] == '.' && char.IsLetter(text[end + 1])) || (start > 0 && text[start - 1] == '.')) continue; // Node.js
-            bool apostrophe = suggestions.Count > 0 && suggestions[0].Replace("'", "").Equals(word, StringComparison.OrdinalIgnoreCase);
+            bool apostrophe = suggestions.Count > 0 && suggestions[0].Contains('\'') && suggestions[0].Replace("'", "").Equals(word, StringComparison.OrdinalIgnoreCase);
             yield return Make(start, length, word, suggestions.Take(4), IssueGroup.Correctness,
                 apostrophe ? "Punctuation/Apostrophe" : "Spelling/Misspelled", apostrophe ? "Missing apostrophe" : "Spelling",
                 apostrophe ? "Contractions need an apostrophe where letters are left out."
                            : $"“{word}” isn't in the {o.Dialect} English dictionary. If it's a name or term you use, add it to your dictionary.",
                 IssueSource.Spelling);
         }
+    }
+
+    static readonly string[] Capitalized =
+    {
+        "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "January", "February", "April", "June", "July",
+        "August", "September", "October", "November", "December", "English", "Spanish", "French", "German", "Italian", "Chinese",
+        "Japanese", "American", "British", "Canadian", "European", "Christmas", "Easter", "Thanksgiving", "Halloween", "Internet",
+    };
+
+    /// Days, months, languages and holidays are always capitalized (Windows' spell checker doesn't flag these).
+    static IEnumerable<Issue> ProperNouns(string text)
+    {
+        foreach (var w in Capitalized)
+            foreach (var m in TextUtil.Matches($@"\b{w.ToLowerInvariant()}\b", text, false))
+                yield return Make(m.Index, m.Length, m.Value, new[] { w }, IssueGroup.Correctness, "Grammar/Capitalization", "Capitalization",
+                    $"“{w}” is a proper noun and is always capitalized.");
     }
 
     /// Frequent misspellings, caught even before Windows' spell checker is consulted.

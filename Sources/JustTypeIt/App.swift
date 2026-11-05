@@ -63,6 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.servicesProvider = ServiceProvider()
         NSUpdateDynamicServices()
         MainActor.assumeIsolated {
+            RewriteAnywhere.shared.install()
             QuickCheck.shared.installHotkey()
             let p = Store.shared.prefs
             if p.checkEverywhere { Everywhere.shared.start() }
@@ -152,6 +153,7 @@ struct MenuBarContent: View {
         Button("Open Just Type It") { AppDelegate.openMain() }
         Button("\(store.stats.suggestionsAccepted) fixes accepted so far") { AppDelegate.openMain() }
         Button("Check Selected Text  ⌃⌥G") { QuickCheck.shared.run() }
+        Button("Rewrite Selected Text  ⌃⌥R") { RewriteAnywhere.shared.run() }
         Toggle("Launch at Login", isOn: Binding(get: { store.prefs.launchAtLogin }, set: { v in
             store.prefs.launchAtLogin = v
             LoginItem.set(v)

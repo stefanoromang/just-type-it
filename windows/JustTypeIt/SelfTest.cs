@@ -67,6 +67,28 @@ static class SelfTest
             var ac = Proactive.Autocorrect("I think teh ", 12);
             Record("Autocorrect logic", ac != null && ac.Replacement == "the" && Proactive.Autocorrect("I feel ill ", 11) == null);
             Record("Pre-send warnings", Proactive.PreSendWarnings("Please see attached. This is unacceptable.", Array.Empty<Issue>()).Count == 2);
+            // Rewrite (rule-based path, available on every PC).
+            var rw = Rewriter.Offline("hey so i think maybe we should move the meeting to thursday because alot of people cant make it", RewriteMode.Professional);
+            Record("Rewrite: more professional (offline)", rw != null && rw.StartsWith("Hello") && rw.Contains("Thursday") && rw.Contains("can't"), rw ?? "null");
+            // Live rewrite in Notepad: select the sentence, rewrite, paste back, verify.
+            if (edit != null && edit.TryGetCurrentPattern(TextPattern.Pattern, out var tp3))
+            {
+                try
+                {
+                    edit.SetFocus();
+                    var range = ((TextPattern)tp3).DocumentRange.FindText("He dont care.", false, false);
+                    range?.Select();
+                    Thread.Sleep(300);
+                    var selected = ((TextPattern)tp3).GetSelection().FirstOrDefault()?.GetText(-1) ?? "";
+                    var fixedText = Rewriter.Offline(selected, RewriteMode.GrammarOnly) ?? selected;
+                    Clipboard.SetText(fixedText);
+                    SendKeys.SendWait("^v");
+                    Thread.Sleep(600);
+                    var after = ((TextPattern)tp3).DocumentRange.GetText(-1);
+                    Record("Rewrite replaces highlighted text in another app", after.Contains("He doesn't care.") && after.Contains("tomorrow"), after);
+                }
+                catch (Exception ex) { Record("Rewrite replaces highlighted text in another app", false, ex.Message); }
+            }
             try { p?.Kill(); } catch { }
             File.Delete(file);
         }

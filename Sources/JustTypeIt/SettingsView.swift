@@ -104,6 +104,7 @@ struct SettingsView: View {
                 Toggle("AI suggestions in other apps (Apple Intelligence, on-device)", isOn: $store.prefs.aiEverywhere)
                 Toggle("Autocorrect obvious typos as you type (teh → the, dont → don't). ⌘Z undoes it.", isOn: $store.prefs.autocorrect)
                 Toggle("Show tone emoji next to the suggestion badge", isOn: $store.prefs.showTone)
+                Toggle("Show a rewrite button next to highlighted text (or press ⌃⌥R)", isOn: $store.prefs.rewriteButton)
                 Toggle("Warn before sending (missing attachment, harsh tone, long message)", isOn: $store.prefs.preSendCheck)
                 Toggle("Launch at login (always running in the menu bar)", isOn: Binding(get: { store.prefs.launchAtLogin }, set: { v in
                     store.prefs.launchAtLogin = v
@@ -120,6 +121,7 @@ struct SettingsView: View {
                 }
             }
             Section("Also") {
+                Text("Highlight text in any app and press **⌃⌥R** (or click the ✨ button next to it) to rewrite it: more professional, casual, shorter, enthusiastic, and more.")
                 Text("Select text in any app and press ⌃⌥G for the full checker in a panel, or right-click → Services → **Check with Just Type It**.")
             }
             Section("Permissions") {

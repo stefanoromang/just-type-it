@@ -15,11 +15,6 @@ final class QuickCheck {
     private var hotKeyRef: EventHotKeyRef?
 
     func installHotkey() {
-        var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        InstallEventHandler(GetApplicationEventTarget(), { _, _, _ in
-            DispatchQueue.main.async { MainActor.assumeIsolated { QuickCheck.shared.run() } }
-            return noErr
-        }, 1, &spec, nil, nil)
         let id = EventHotKeyID(signature: OSType(0x4A54_4954), id: 1) // 'JTIT'
         RegisterEventHotKey(UInt32(kVK_ANSI_G), UInt32(controlKey | optionKey), id, GetApplicationEventTarget(), 0, &hotKeyRef)
     }
@@ -63,15 +58,43 @@ final class QuickCheck {
         app.activate()
         Task {
             try? await Task.sleep(nanoseconds: 250_000_000)
-            let pb = NSPasteboard.general
-            let saved = pb.string(forType: .string)
-            pb.clearContents()
-            pb.setString(result, forType: .string)
-            sendKey(CGKeyCode(kVK_ANSI_V))
-            try? await Task.sleep(nanoseconds: 400_000_000)
-            if let saved { pb.clearContents(); pb.setString(saved, forType: .string) }
+            pastePublic(result)
         }
     }
+
+    /// Saves every clipboard item and format, so restoring never loses images or rich text.
+    static func saveClipboard() -> [[NSPasteboard.PasteboardType: Data]] {
+        (NSPasteboard.general.pasteboardItems ?? []).map { item in
+            var d: [NSPasteboard.PasteboardType: Data] = [:]
+            for t in item.types { if let v = item.data(forType: t) { d[t] = v } }
+            return d
+        }
+    }
+
+    static func restoreClipboard(_ items: [[NSPasteboard.PasteboardType: Data]], ifUnchangedSince change: Int) {
+        let pb = NSPasteboard.general
+        guard pb.changeCount == change else { return }   // the user copied something new meanwhile
+        pb.clearContents()
+        let objs = items.map { d -> NSPasteboardItem in let it = NSPasteboardItem(); for (t, v) in d { it.setData(v, forType: t) }; return it }
+        if !objs.isEmpty { pb.writeObjects(objs) }
+    }
+
+    /// Pastes text into the frontmost app's current selection, then restores the clipboard.
+    func pastePublic(_ text: String) {
+        let pb = NSPasteboard.general
+        let saved = Self.saveClipboard()
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+        pb.setData(Data(), forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
+        let change = pb.changeCount
+        sendKey(CGKeyCode(kVK_ANSI_V))
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            Self.restoreClipboard(saved, ifUnchangedSince: change)
+        }
+    }
+
+    func copySelectionPublic() async -> String? { await copySelection() }
 
     private func copySelection() async -> String? {
         // Accessibility first, then ⌘C as a fallback.
@@ -88,16 +111,16 @@ final class QuickCheck {
             _ = AXIsProcessTrustedWithOptions(opts)
         }
         let pb = NSPasteboard.general
+        let saved = Self.saveClipboard()
         let before = pb.changeCount
-        let saved = pb.string(forType: .string)
         sendKey(CGKeyCode(kVK_ANSI_C))
-        for _ in 0..<20 {
+        for _ in 0..<25 {
             try? await Task.sleep(nanoseconds: 20_000_000)
             if pb.changeCount != before { break }
         }
         guard pb.changeCount != before else { return nil }
         let s = pb.string(forType: .string)
-        if let saved { pb.clearContents(); pb.setString(saved, forType: .string) }
+        Self.restoreClipboard(saved, ifUnchangedSince: pb.changeCount)
         return s
     }
 
