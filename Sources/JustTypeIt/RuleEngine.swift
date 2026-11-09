@@ -57,6 +57,9 @@ enum RuleEngine {
 
     // MARK: macOS spelling & grammar
 
+    /// Names every install should know (the app's author and product names).
+    static let builtInWords: Set<String> = ["gunness", "stefano", "collectiviq", "ollama"]
+
     static func systemCheck(_ text: String, _ o: CheckOptions) -> [Issue] {
         let sc = NSSpellChecker.shared
         let lang = o.dialect.spellLanguage
@@ -71,7 +74,7 @@ enum RuleEngine {
         for r in results {
             let word = TextUtil.substring(text, r.range)
             if r.resultType == .spelling {
-                if o.dictionary.contains(word.lowercased()) { continue }
+                if o.dictionary.contains(word.lowercased()) || builtInWords.contains(word.lowercased()) { continue }
                 if word.contains(where: \.isNumber) || word.hasPrefix("http") || word.contains("@") { continue }
                 // Tech names like Node.js, macOS, iPhone, GitHub, camelCase identifiers.
                 let ns = text as NSString

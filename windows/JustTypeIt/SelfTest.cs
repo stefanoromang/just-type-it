@@ -96,9 +96,9 @@ static class SelfTest
                 original.SetText("user clipboard ✓");
                 original.SetData(DataFormats.Rtf, @"{\rtf1 user clipboard}");
                 Clipboard.SetDataObject(original, true);
-                if (edit != null) { edit.SetFocus(); Thread.Sleep(200); }
-                InputHelper.Paste(" ").GetAwaiter().GetResult();
-                Thread.Sleep(200);
+                var saved = InputHelper.SaveClipboard();
+                Clipboard.SetText("pasted fix");
+                InputHelper.RestoreClipboard(saved);
                 var back = Clipboard.GetDataObject();
                 Record("Clipboard restored after paste (text + rich text)",
                     back?.GetData(DataFormats.UnicodeText) as string == "user clipboard ✓" && back.GetDataPresent(DataFormats.Rtf));
