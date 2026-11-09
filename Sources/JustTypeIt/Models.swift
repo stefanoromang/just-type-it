@@ -118,6 +118,17 @@ struct Goals: Codable, Hashable {
     var summary: String {
         "intent: \(intent.label), audience: \(audience.label), formality: \(formality.label), domain: \(domain.label)"
     }
+
+    init() {}
+
+    // Tolerant decoding: missing or unknown values fall back to defaults instead of failing.
+    init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        intent = (try? c.decode(Intent.self, forKey: .intent)) ?? .inform
+        audience = (try? c.decode(Audience.self, forKey: .audience)) ?? .knowledgeable
+        formality = (try? c.decode(Formality.self, forKey: .formality)) ?? .neutral
+        domain = (try? c.decode(Domain.self, forKey: .domain)) ?? .general
+    }
 }
 
 struct Document: Codable, Identifiable, Hashable {
@@ -127,6 +138,21 @@ struct Document: Codable, Identifiable, Hashable {
     var goals = Goals()
     var modified = Date()
     var ignoredKeys: Set<String> = []
+
+    init(id: UUID = UUID(), title: String, text: String, goals: Goals = Goals(), modified: Date = Date(), ignoredKeys: Set<String> = []) {
+        self.id = id; self.title = title; self.text = text; self.goals = goals; self.modified = modified; self.ignoredKeys = ignoredKeys
+    }
+
+    // Tolerant decoding: a document from an older or newer version always loads.
+    init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        id = (try? c.decode(UUID.self, forKey: .id)) ?? UUID()
+        title = (try? c.decode(String.self, forKey: .title)) ?? ""
+        text = (try? c.decode(String.self, forKey: .text)) ?? ""
+        goals = (try? c.decode(Goals.self, forKey: .goals)) ?? Goals()
+        modified = (try? c.decode(Date.self, forKey: .modified)) ?? Date()
+        ignoredKeys = (try? c.decode(Set<String>.self, forKey: .ignoredKeys)) ?? []
+    }
 
     var displayTitle: String {
         if !title.trimmingCharacters(in: .whitespaces).isEmpty { return title }

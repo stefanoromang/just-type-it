@@ -216,11 +216,8 @@ final class RewriteAnywhere {
         var cf = CFRange(location: range.location, length: min(range.length, 2000))
         guard let v = AXValueCreate(.cfRange, &cf) else { return nil }
         var out: CFTypeRef?
-        guard AXUIElementCopyParameterizedAttributeValue(el, kAXBoundsForRangeParameterizedAttribute as CFString, v, &out) == .success, let out,
-              CFGetTypeID(out) == AXValueGetTypeID() else { return nil }
-        var r = CGRect.zero
-        AXValueGetValue(out as! AXValue, .cgRect, &r)
-        guard r.width > 0 || r.height > 0 else { return nil }
+        guard AXUIElementCopyParameterizedAttributeValue(el, kAXBoundsForRangeParameterizedAttribute as CFString, v, &out) == .success,
+              let r = Everywhere.axRect(out), r.width > 0 || r.height > 0 else { return nil }
         let h = NSScreen.screens.first?.frame.height ?? 0
         return NSRect(x: r.minX, y: h - r.maxY, width: r.width, height: r.height)
     }
@@ -284,19 +281,38 @@ final class RewriteAnywhere {
         guard let src = source else { return }
         src.app.activate()
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            if let el = src.element, let range = src.range, let full = FocusedEditor.string(el, kAXValueAttribute),
-               TextUtil.substring(full, range) == src.text,
-               await AccessibilityEdit.apply(editor: el, appPID: src.app.processIdentifier, bundleID: src.app.bundleIdentifier ?? "",
-                                             snapshot: full, range: range, original: src.text, replacement: new) {
-                Store.shared.stats.rewrites += 1
+            guard await QuickCheck.waitUntilFrontmost(src.app) else {
+                copyWithNotice(new, "Couldn't switch back to \(src.app.localizedName ?? "the app"). The rewrite is on your clipboard; press ⌘V to paste it.")
                 return
             }
-            // Fallback: the selection is still active in the app, so paste over it.
+            if let el = src.element, let range = src.range, let full = FocusedEditor.string(el, kAXValueAttribute),
+               TextUtil.substring(full, range) == src.text {
+                if await AccessibilityEdit.apply(editor: el, appPID: src.app.processIdentifier, bundleID: src.app.bundleIdentifier ?? "",
+                                                 snapshot: full, range: range, original: src.text, replacement: new) {
+                    Store.shared.stats.rewrites += 1
+                    return
+                }
+                // Only fall back to pasting if nothing changed and the same text is still selected.
+                guard FocusedEditor.string(el, kAXValueAttribute) == full, AccessibilityEdit.selection(el) == range else {
+                    copyWithNotice(new, "The text changed before the rewrite could be applied. The rewrite is on your clipboard; press ⌘V to paste it.")
+                    return
+                }
+            }
             QuickCheck.shared.pastePublic(new)
             Store.shared.stats.rewrites += 1
         }
     }
+}
+
+/// Puts text on the clipboard and tells the user, when it can't be placed safely.
+@MainActor func copyWithNotice(_ text: String, _ message: String) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(text, forType: .string)
+    let alert = NSAlert()
+    alert.messageText = "Just Type It"
+    alert.informativeText = message
+    NSApp.activate(ignoringOtherApps: true)
+    alert.runModal()
 }
 
 /// Small round button that floats next to selected text.

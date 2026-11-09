@@ -89,6 +89,25 @@ static class SelfTest
                 }
                 catch (Exception ex) { Record("Rewrite replaces highlighted text in another app", false, ex.Message); }
             }
+            // Clipboard is fully restored after a paste (images/rich text included).
+            try
+            {
+                var original = new DataObject();
+                original.SetText("user clipboard ✓");
+                original.SetData(DataFormats.Rtf, @"{\rtf1 user clipboard}");
+                Clipboard.SetDataObject(original, true);
+                if (edit != null) { edit.SetFocus(); Thread.Sleep(200); }
+                InputHelper.Paste(" ").GetAwaiter().GetResult();
+                Thread.Sleep(200);
+                var back = Clipboard.GetDataObject();
+                Record("Clipboard restored after paste (text + rich text)",
+                    back?.GetData(DataFormats.UnicodeText) as string == "user clipboard ✓" && back.GetDataPresent(DataFormats.Rtf));
+            }
+            catch (Exception ex) { Record("Clipboard restored after paste (text + rich text)", false, ex.Message); }
+            // Quick Check applies overlapping fixes safely (no crash, no garbled text).
+            var messy = "Their going to the store tomorrow and he dont care about the affect it has on the team or the budget this quarter at all.";
+            var quickFixed = Rewriter.ApplyIssues(messy, RuleEngine.Check(messy, new CheckOptions()));
+            Record("Quick Check fixes apply without overlap", quickFixed.Contains("They're going") && quickFixed.Contains("he doesn't") && quickFixed.Contains("the effect"), quickFixed);
             try { p?.Kill(); } catch { }
             File.Delete(file);
         }

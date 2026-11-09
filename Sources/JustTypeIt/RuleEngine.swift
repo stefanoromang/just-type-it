@@ -14,6 +14,8 @@ enum RuleEngine {
         var issues: [Issue] = []
         // Paragraph-local checks are cached per paragraph: while you type, only the edited
         // paragraph is re-checked. Document-wide checks (repetition, consistency) run on the whole text.
+        let key = "\(o.dialect)|\(o.goals)|\(o.dictionary.sorted())|\(o.styleRules)|\(o.passive)\(o.inclusive)\(o.hedging)"
+        if key != cacheKey { paragraphCache.removeAll(); cacheKey = key }
         for p in lineParagraphs(text) {
             for var i in cachedLocal(p.text, o) {
                 i.range.location += p.range.location
@@ -32,8 +34,6 @@ enum RuleEngine {
     nonisolated(unsafe) private static var cacheKey = ""
 
     private static func cachedLocal(_ p: String, _ o: CheckOptions) -> [Issue] {
-        let key = "\(o.dialect)|\(o.goals)|\(o.dictionary.sorted())|\(o.styleRules)|\(o.passive)\(o.inclusive)\(o.hedging)"
-        if key != cacheKey { paragraphCache.removeAll(); cacheKey = key }
         if let hit = paragraphCache[p] { return hit.map { var i = $0; i.id = UUID(); return i } }
         let found = local(p, o)
         if paragraphCache.count > 2000 { paragraphCache.removeAll() }
@@ -113,6 +113,8 @@ enum RuleEngine {
     static func patternRules(_ text: String, _ o: CheckOptions) -> [Issue] {
         var out: [Issue] = []
         for rule in RuleData.grammar + GrammarRules.all {
+            // British, Australian, Canadian and Indian English allow "the team are".
+            if rule.kind == "Grammar/CollectiveNoun", o.dialect != .american { continue }
             for m in TextUtil.matches(rule.pattern, in: text, caseInsensitive: rule.caseInsensitive) {
                 let orig = TextUtil.substring(text, m.range)
                 if o.dictionary.contains(orig.lowercased()) { continue }
@@ -222,7 +224,7 @@ enum RuleEngine {
                 out.append(Issue(range: m.range, original: o, replacements: [rep(o)], group: group, kind: kind, title: title, explanation: why))
             }
         }
-        add("\\b(\\w+) \\1\\b", { String($0.split(separator: " ")[0]) }, "Grammar/RepeatedWord", "Repeated word",
+        add("\\b(?!(?:that|had|is|bye|knock|ha)\\s)(\\w+) \\1\\b", { String($0.split(separator: " ")[0]) }, "Grammar/RepeatedWord", "Repeated word",
             "The same word appears twice in a row.")
         add("(?<=\\S)  +(?=\\S)", { _ in " " }, "Punctuation/Spacing", "Extra space", "Use a single space between words.")
         add("\\s+([,.;:!?])(?!\\d)", { $0.trimmingCharacters(in: .whitespaces) }, "Punctuation/Spacing", "Space before punctuation",
@@ -344,7 +346,9 @@ enum RuleEngine {
                                  explanation: "Sentences over 30 words are hard to follow. Try splitting this one."))
             }
             // Fragment: no verb.
-            let greeting = TextUtil.matches("^(hi|hey|hello|dear|thanks|thank you|cheers|best|regards|sincerely|good (morning|afternoon|evening)|congrats|congratulations|welcome|great job|well done|happy \\w+|ok|okay|yes|no|sure)\\b", in: s.text).count > 0
+            let greeting = TextUtil.matches("^(hi|hey|hello|dear|thanks|thank you|cheers|best|regards|sincerely|good (morning|afternoon|evening)|congrats|congratulations|welcome|great job|well done|happy \\w+|ok|okay|yes|no|sure|me too|you too|same here|of course|no problem|sounds good|got it|will do|see you\\b.*)\\b", in: s.text).count > 0
+                // Imperatives ("Contact us at…", "Call me tomorrow.") start with a verb the tagger can miss.
+                || TextUtil.matches("^(contact|call|email|visit|send|see|check|reply|join|let|please|click|read|review|note|remember|ask|tell|find|use|try|keep|bring|meet|enjoy|follow)\\b", in: s.text).count > 0
             if words.count >= 2, words.count <= 12, !greeting, !s.text.hasSuffix("!"), !hasVerb(s.text),
                !words.dropFirst().contains(where: { let w = $0.lowercased().trimmingCharacters(in: .punctuationCharacters); return w.hasSuffix("ed") || w.hasSuffix("es") || ["is", "are", "was", "were", "has", "had", "am"].contains(w) }), !s.text.hasSuffix(":"), !s.text.hasSuffix("?"),
                !s.text.hasPrefix("-"), !s.text.hasPrefix("•"), s.text.last.map({ ".!".contains($0) }) == true {
@@ -378,10 +382,12 @@ enum RuleEngine {
         return out
     }
 
+    nonisolated(unsafe) private static let tagger = NLTagger(tagSchemes: [.lexicalClass])
+
     static func isVerb(_ word: String, in sentence: String, at utf16Offset: Int) -> Bool {
         let common: Set<String> = ["am", "is", "are", "was", "were", "have", "has", "had", "will", "can", "did", "do", "does", "should", "would", "could", "might", "must"]
         if common.contains(word.lowercased()) { return true }
-        let t = NLTagger(tagSchemes: [.lexicalClass])
+        let t = tagger
         t.string = sentence
         guard let r = Range(NSRange(location: utf16Offset, length: 0), in: sentence) else { return false }
         let (tag, _) = t.tag(at: r.lowerBound, unit: .word, scheme: .lexicalClass)
@@ -389,7 +395,7 @@ enum RuleEngine {
     }
 
     static func hasVerb(_ sentence: String) -> Bool {
-        let t = NLTagger(tagSchemes: [.lexicalClass])
+        let t = tagger
         t.string = sentence
         var found = false
         t.enumerateTags(in: sentence.startIndex..<sentence.endIndex, unit: .word, scheme: .lexicalClass, options: [.omitWhitespace, .omitPunctuation]) { tag, _ in

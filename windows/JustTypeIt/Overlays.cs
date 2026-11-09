@@ -8,6 +8,9 @@ namespace JustTypeIt;
 /// Base for small top-most windows that never take focus away from the app you're typing in.
 public class FloatingForm : Form
 {
+    /// Scales a design size (at 100%) to this monitor's DPI.
+    protected int Px(int v) => (int)Math.Round(v * DeviceDpi / 96f);
+
     public FloatingForm()
     {
         FormBorderStyle = FormBorderStyle.None;
@@ -100,7 +103,7 @@ public sealed class SuggestionBadge : FloatingForm
 
     public SuggestionBadge()
     {
-        Size = new Size(28, 28);
+        Size = new Size(Px(28), Px(28));
         BackColor = Color.Magenta;
         TransparencyKey = Color.Magenta;
         Cursor = Cursors.Hand;
@@ -109,8 +112,8 @@ public sealed class SuggestionBadge : FloatingForm
     public void Show(Rectangle field, int n, IssueGroup g, string? toneEmoji = null)
     {
         count = n; group = g; tone = toneEmoji;
-        Size = new Size(tone == null ? 28 : 58, 28);
-        Location = new Point(field.Right - Width - 8, field.Bottom - Height - 8);
+        Size = new Size(Px(tone == null ? 28 : 58), Px(28));
+        Location = new Point(field.Right - Width - Px(8), field.Bottom - Height - Px(8));
         Invalidate();
         ShowQuietly();
     }
@@ -124,15 +127,15 @@ public sealed class SuggestionBadge : FloatingForm
         if (tone != null)
         {
             using var bg = new SolidBrush(Color.FromArgb(245, 245, 245));
-            e.Graphics.FillEllipse(bg, 1, 1, 25, 25);
+            e.Graphics.FillEllipse(bg, 1, 1, Px(25), Px(25));
             using var ef = new Font("Segoe UI Emoji", 10f);
-            TextRenderer.DrawText(e.Graphics, tone, ef, new Rectangle(0, 0, 28, 28), Color.Black, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-            x = 30;
+            TextRenderer.DrawText(e.Graphics, tone, ef, new Rectangle(0, 0, Px(28), Px(28)), Color.Black, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            x = Px(30);
         }
         using var b = new SolidBrush(count == 0 ? Color.SeaGreen : group.Color());
-        e.Graphics.FillEllipse(b, x + 1, 1, 25, 25);
+        e.Graphics.FillEllipse(b, x + 1, 1, Px(25), Px(25));
         using var f = new Font("Segoe UI", count > 9 ? 8f : 9.5f, FontStyle.Bold);
-        TextRenderer.DrawText(e.Graphics, count == 0 ? "✓" : count > 99 ? "99+" : count.ToString(), f, new Rectangle(x, 0, 28, 28), Color.White,
+        TextRenderer.DrawText(e.Graphics, count == 0 ? "✓" : count > 99 ? "99+" : count.ToString(), f, new Rectangle(x, 0, Px(28), Px(28)), Color.White,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
     }
 }
@@ -164,16 +167,16 @@ public sealed class SuggestionCard : FloatingForm
         panel.Controls.Clear();
         panel.Controls.Add(new Label { Text = $"{issue.Group.Label().ToUpperInvariant()} · {issue.Title}", ForeColor = issue.Group.Color(), Font = new Font("Segoe UI", 8.5f, FontStyle.Bold), AutoSize = true });
         if (issue.Length <= 80)
-            panel.Controls.Add(new Label { Text = issue.Original, Font = new Font("Segoe UI", 10f, FontStyle.Strikeout), ForeColor = Color.Gray, AutoSize = true, MaximumSize = new Size(320, 0) });
+            panel.Controls.Add(new Label { Text = issue.Original, Font = new Font("Segoe UI", 10f, FontStyle.Strikeout), ForeColor = Color.Gray, AutoSize = true, MaximumSize = new Size(Px(320), 0) });
         foreach (var r in issue.Replacements.Take(4))
         {
-            var b = new Button { Text = r.Length == 0 ? "Remove" : r, AutoSize = true, FlatStyle = FlatStyle.Flat, BackColor = issue.Group.Color(), ForeColor = Color.White, Font = new Font("Segoe UI", 10f, FontStyle.Bold), Margin = new Padding(0, 4, 0, 0), MaximumSize = new Size(320, 0) };
+            var b = new Button { Text = r.Length == 0 ? "Remove" : r, AutoSize = true, FlatStyle = FlatStyle.Flat, BackColor = issue.Group.Color(), ForeColor = Color.White, Font = new Font("Segoe UI", 10f, FontStyle.Bold), Margin = new Padding(0, 4, 0, 0), MaximumSize = new Size(Px(320), 0) };
             b.FlatAppearance.BorderSize = 0;
             var rep = r;
             b.Click += (_, _) => { Hide(); apply(rep); };
             panel.Controls.Add(b);
         }
-        panel.Controls.Add(new Label { Text = issue.Explanation, AutoSize = true, MaximumSize = new Size(320, 0), ForeColor = Color.FromArgb(80, 80, 80), Font = new Font("Segoe UI", 9f), Margin = new Padding(0, 8, 0, 4) });
+        panel.Controls.Add(new Label { Text = issue.Explanation, AutoSize = true, MaximumSize = new Size(Px(320), 0), ForeColor = Color.FromArgb(80, 80, 80), Font = new Font("Segoe UI", 9f), Margin = new Padding(0, 8, 0, 4) });
         var row = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight };
         var dis = new LinkLabel { Text = "Dismiss", AutoSize = true };
         dis.Click += (_, _) => { Hide(); dismiss(); };
@@ -187,7 +190,7 @@ public sealed class SuggestionCard : FloatingForm
         panel.Controls.Add(row);
         panel.ResumeLayout();
         var screen = Screen.FromPoint(at).WorkingArea;
-        var size = GetPreferredSize(new Size(360, 0));
+        var size = GetPreferredSize(new Size(Px(360), 0));
         Location = new Point(Math.Min(at.X, screen.Right - size.Width - 4), at.Y + size.Height > screen.Bottom ? at.Y - size.Height - 30 : at.Y);
         ShowQuietly();
     }
@@ -197,6 +200,8 @@ public sealed class SuggestionCard : FloatingForm
 public sealed class SummaryWindow : FloatingForm
 {
     static SummaryWindow? open;
+
+    public static void CloseOpen() { if (open != null && !open.IsDisposed) open.Close(); open = null; }
 
     public static void ShowFor(string app, List<Issue> issues, List<Proactive.SendWarning> warnings, Func<Issue, Task<bool>> fix, Func<Task> fixAll)
     {
@@ -210,34 +215,34 @@ public sealed class SummaryWindow : FloatingForm
 
     SummaryWindow(string app, List<Issue> issues, List<Proactive.SendWarning> warnings, Func<Issue, Task<bool>> fix, Func<Task> fixAll)
     {
-        Size = new Size(380, 420);
+        Size = new Size(Px(380), Px(420));
         BackColor = Color.White;
-        var header = new Label { Text = $"Just Type It · {app} · {issues.Count} suggestion{(issues.Count == 1 ? "" : "s")}", Dock = DockStyle.Top, Height = 34, Font = new Font("Segoe UI", 10f, FontStyle.Bold), Padding = new Padding(10, 8, 0, 0) };
-        var close = new Button { Text = "✕", Dock = DockStyle.Right, Width = 34, FlatStyle = FlatStyle.Flat };
+        var header = new Label { Text = $"Just Type It · {app} · {issues.Count} suggestion{(issues.Count == 1 ? "" : "s")}", Dock = DockStyle.Top, Height = Px(34), Font = new Font("Segoe UI", 10f, FontStyle.Bold), Padding = new Padding(10, 8, 0, 0) };
+        var close = new Button { Text = "✕", Dock = DockStyle.Right, Width = Px(34), FlatStyle = FlatStyle.Flat };
         close.FlatAppearance.BorderSize = 0;
         close.Click += (_, _) => Close();
         header.Controls.Add(close);
         var list = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(8) };
         foreach (var w in warnings)
-            list.Controls.Add(new Label { Text = $"⚠ {w.Title} · {w.Detail}", AutoSize = true, MaximumSize = new Size(340, 0), BackColor = Color.FromArgb(255, 243, 224), Padding = new Padding(6), Margin = new Padding(0, 0, 0, 6) });
+            list.Controls.Add(new Label { Text = $"⚠ {w.Title} · {w.Detail}", AutoSize = true, MaximumSize = new Size(Px(340), 0), BackColor = Color.FromArgb(255, 243, 224), Padding = new Padding(6), Margin = new Padding(0, 0, 0, 6) });
         if (issues.Count == 0)
             list.Controls.Add(new Label { Text = "✓ No mistakes found", AutoSize = true, ForeColor = Color.SeaGreen, Font = new Font("Segoe UI", 10f, FontStyle.Bold), Padding = new Padding(4) });
         foreach (var i in issues.Take(60))
         {
-            var row = new Panel { Width = 340, Height = 46, Margin = new Padding(0, 0, 0, 6), BackColor = Color.FromArgb(246, 246, 246) };
-            row.Controls.Add(new Label { Text = i.Replacements.Count > 0 ? $"{Trim(i.Original)} → {(i.Replacements[0].Length == 0 ? "remove" : Trim(i.Replacements[0]))}" : Trim(i.Original), Location = new Point(10, 5), AutoSize = true, Font = new Font("Segoe UI", 9.5f) });
-            row.Controls.Add(new Label { Text = i.Title, Location = new Point(10, 25), AutoSize = true, ForeColor = i.Group.Color(), Font = new Font("Segoe UI", 8f) });
+            var row = new Panel { Width = Px(340), Height = Px(46), Margin = new Padding(0, 0, 0, Px(6)), BackColor = Color.FromArgb(246, 246, 246) };
+            row.Controls.Add(new Label { Text = i.Replacements.Count > 0 ? $"{Trim(i.Original)} → {(i.Replacements[0].Length == 0 ? "remove" : Trim(i.Replacements[0]))}" : Trim(i.Original), Location = new Point(Px(10), Px(5)), AutoSize = true, Font = new Font("Segoe UI", 9.5f) });
+            row.Controls.Add(new Label { Text = i.Title, Location = new Point(Px(10), Px(25)), AutoSize = true, ForeColor = i.Group.Color(), Font = new Font("Segoe UI", 8f) });
             if (i.Replacements.Count > 0)
             {
-                var b = new Button { Text = "Fix", Size = new Size(48, 26), Location = new Point(284, 10), FlatStyle = FlatStyle.Flat };
+                var b = new Button { Text = "Fix", Size = new Size(Px(48), Px(26)), Location = new Point(Px(284), Px(10)), FlatStyle = FlatStyle.Flat };
                 var issue = i;
                 b.Click += async (_, _) => { b.Enabled = false; if (await fix(issue)) row.Visible = false; else b.Enabled = true; };
                 row.Controls.Add(b);
             }
             list.Controls.Add(row);
         }
-        var bottom = new Panel { Dock = DockStyle.Bottom, Height = 44 };
-        var all = new Button { Text = $"Fix all ({issues.Count(x => x.Replacements.Count > 0)})", Size = new Size(140, 30), Location = new Point(228, 7), FlatStyle = FlatStyle.Flat, BackColor = IssueGroup.Clarity.Color(), ForeColor = Color.White };
+        var bottom = new Panel { Dock = DockStyle.Bottom, Height = Px(44) };
+        var all = new Button { Text = $"Fix all ({issues.Count(x => x.Replacements.Count > 0)})", Size = new Size(Px(140), Px(30)), Location = new Point(Px(228), Px(7)), FlatStyle = FlatStyle.Flat, BackColor = IssueGroup.Clarity.Color(), ForeColor = Color.White };
         all.Click += async (_, _) => { Close(); await fixAll(); };
         bottom.Controls.Add(all);
         Controls.Add(list);

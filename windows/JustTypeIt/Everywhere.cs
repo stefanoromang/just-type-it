@@ -25,6 +25,10 @@ public sealed class Everywhere : IDisposable
     List<Issue> issues = new();
     List<(Issue issue, List<Rectangle> rects)> marks = new();
     bool busy, applying;
+    int elementPid;
+    string measuredFor = "";
+    Rectangle measuredBounds;
+    DateTime measuredAt;
     public string CurrentApp { get; private set; } = "";
     public int IssueCount => issues.Count;
     public bool Running => timer.Enabled;
@@ -49,8 +53,8 @@ public sealed class Everywhere : IDisposable
 
     void HideAll()
     {
-        overlay.Hide(); badge.Hide();
-        marks.Clear();
+        overlay.Hide(); badge.Hide(); SummaryWindow.CloseOpen();
+        marks.Clear(); measuredFor = "";
         if (issues.Count != 0) { issues = new(); Changed?.Invoke(); }
     }
 
@@ -77,7 +81,11 @@ public sealed class Everywhere : IDisposable
             var read = await Task.Run(() => ReadFocused((int)pid));
             if (read == null) { element = null; HideAll(); return; }
             var (el, text, bounds) = read.Value;
-            if (element == null || !Automation.Compare(el, element)) { element = el; lastText = ""; checkedText = null; autocorrected.Clear(); dismissedCard(); }
+            if (element == null || !Automation.Compare(el, element))
+            {
+                element = el; elementPid = (int)pid; lastText = ""; checkedText = null; autocorrected.Clear(); dismissedCard();
+                issues = new(); marks = new(); measuredFor = ""; overlay.Hide(); SummaryWindow.CloseOpen();
+            }
             CurrentApp = FriendlyName(proc);
             if (text != lastText)
             {
@@ -102,8 +110,13 @@ public sealed class Everywhere : IDisposable
                 if (checkedText == text) badge.Show(bounds, 0, IssueGroup.Correctness, tone); else badge.Hide();
                 return;
             }
-            var snapshot = issues.ToList();
-            marks = await Task.Run(() => Measure(el, text, snapshot, bounds));
+            var signature = text + "|" + issues.Count;
+            if (signature != measuredFor || bounds != measuredBounds || (DateTime.Now - measuredAt).TotalMilliseconds > 1500)
+            {
+                var snapshot = issues.ToList();
+                marks = await Task.Run(() => Measure(el, text, snapshot, bounds));
+                measuredFor = signature; measuredBounds = bounds; measuredAt = DateTime.Now;
+            }
             overlay.Show(bounds, marks);
             badge.Show(bounds, issues.Count, issues.Any(i => i.Group == IssueGroup.Correctness) ? IssueGroup.Correctness : issues[0].Group, tone);
         }
@@ -182,11 +195,13 @@ public sealed class Everywhere : IDisposable
         var outList = new List<(Issue, List<Rectangle>)>();
         if (!el.TryGetCurrentPattern(TextPattern.Pattern, out var tpObj)) return outList;
         var tp = (TextPattern)tpObj;
+        bool crlf;
+        try { crlf = tp.DocumentRange.GetText(-1).Contains("\r\n"); } catch { return outList; }
         foreach (var i in list.Take(80))
         {
             try
             {
-                var range = RangeFor(tp, text, i.Start, i.Length);
+                var range = RangeFor(tp, text, i.Start, i.Length, crlf);
                 if (range == null) continue;
                 var rects = range.GetBoundingRectangles()
                     .Select(r => new Rectangle((int)r.X, (int)r.Y, (int)Math.Ceiling(r.Width), (int)Math.Ceiling(r.Height)))
@@ -199,18 +214,31 @@ public sealed class Everywhere : IDisposable
     }
 
     /// A TextPatternRange covering [start, start+length) of the normalized text.
-    static TextPatternRange? RangeFor(TextPattern tp, string text, int start, int length)
+    static TextPatternRange? RangeFor(TextPattern tp, string text, int start, int length, bool? crlfKnown = null)
     {
         var range = tp.DocumentRange.Clone();
         // Normalized text uses \n; the control may count \r\n as one or two characters. Count line breaks before start.
-        int breaks = text.Take(start).Count(ch => ch == '\n');
-        var full = tp.DocumentRange.GetText(-1);
-        int crlf = full.Contains("\r\n") ? 1 : 0;
+        int breaks = 0;
+        for (int k = 0; k < start && k < text.Length; k++) if (text[k] == '\n') breaks++;
+        int crlf = (crlfKnown ?? tp.DocumentRange.GetText(-1).Contains("\r\n")) ? 1 : 0;
         range.MoveEndpointByRange(TextPatternRangeEndpoint.End, range, TextPatternRangeEndpoint.Start);
         if (range.Move(TextUnit.Character, start + breaks * crlf) <= 0 && start > 0) return null;
         range.MoveEndpointByUnit(TextPatternRangeEndpoint.End, TextUnit.Character, length);
+        var want = TextUtil.Sub(text, start, length);
         var got = range.GetText(length + 2).Replace("\r\n", "\n");
-        return got.StartsWith(TextUtil.Sub(text, start, length), StringComparison.Ordinal) ? range : null;
+        if (got.StartsWith(want, StringComparison.Ordinal)) return range;
+        // Emoji and other combined characters count as one "character" in some apps (Chrome, Edge, Teams):
+        // find the word near the expected spot instead.
+        if (want.Length >= 2)
+        {
+            var near = tp.DocumentRange.Clone();
+            near.MoveEndpointByRange(TextPatternRangeEndpoint.End, near, TextPatternRangeEndpoint.Start);
+            near.Move(TextUnit.Character, Math.Max(0, start + breaks * crlf - 40));
+            near.MoveEndpointByUnit(TextPatternRangeEndpoint.End, TextUnit.Character, length + 80);
+            var found = near.FindText(want, false, false);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     // MARK: Interaction
@@ -249,7 +277,8 @@ public sealed class Everywhere : IDisposable
             {
                 autocorrected.Add(f.Start);
                 var issue = new Issue { Start = f.Start, Length = f.Length, Original = f.Original, Replacements = new() { f.Replacement }, Kind = "Autocorrect" };
-                if (!await Apply(issue, f.Replacement, restoreCaret: true)) break;
+                if (!await Apply(issue, f.Replacement, restoreCaret: true, caretBefore: caret)) break;
+                caret += f.Replacement.Length - f.Length;
             }
         }, TaskScheduler.FromCurrentSynchronizationContext());
     }
@@ -278,12 +307,17 @@ public sealed class Everywhere : IDisposable
 
     async Task FixAll()
     {
+        int lastStart = int.MaxValue;
         foreach (var i in issues.Where(x => x.Replacements.Count > 0 && x.Length <= 80).OrderByDescending(x => x.Start).ToList())
+        {
+            if (i.End > lastStart) continue;   // overlapping suggestion: skip
             if (!await Apply(i, i.Replacements[0])) break;
+            lastStart = i.Start;
+        }
     }
 
     /// Replaces the flagged text inside the other app, then verifies the result.
-    public async Task<bool> Apply(Issue issue, string replacement, bool restoreCaret = false)
+    public async Task<bool> Apply(Issue issue, string replacement, bool restoreCaret = false, int caretBefore = -1)
     {
         if (applying || element == null) return false;
         applying = true;
@@ -308,37 +342,33 @@ public sealed class Everywhere : IDisposable
             });
             if (!selected) return false;
             await Task.Delay(60);
-            Paste(replacement);
-            for (int i = 0; i < 15; i++)
+            // Abort if the user kept typing or switched apps: never paste into the wrong place.
+            var still = await Task.Run(() => ReadText(el));
+            if (still != before || InputHelper.ForegroundProcessId() != (uint)elementPid) { checkedText = null; return false; }
+            string? now = null;
+            await InputHelper.Paste(replacement, async () =>
             {
-                await Task.Delay(50);
-                var now = await Task.Run(() => ReadText(el));
-                if (now == expected)
+                now = await Task.Run(() => ReadText(el));
+                return now == expected || (now != null && now != before);
+            });
+            if (now == expected)
+            {
+                if (restoreCaret && caretBefore >= 0)
                 {
-                    if (restoreCaret)
+                    // Put the cursor back where the user was typing (shifted by the fix if it was before it).
+                    int caret = caretBefore + (issue.End <= caretBefore ? replacement.Length - issue.Length : 0);
+                    await Task.Run(() =>
                     {
-                        // Put the cursor back at the end of what the user typed.
-                        await Task.Run(() =>
-                        {
-                            try
-                            {
-                                if (el.TryGetCurrentPattern(TextPattern.Pattern, out var tp2))
-                                {
-                                    var end = RangeFor((TextPattern)tp2, now, now.Length, 0);
-                                    end?.Select();
-                                }
-                            }
-                            catch { }
-                        });
-                    }
-                    Store.Shared.Prefs.FixesAccepted++;
-                    Store.Shared.Save();
-                    issues.Remove(issue);
-                    lastText = now; checkedText = null;
-                    Changed?.Invoke();
-                    return true;
+                        try { if (el.TryGetCurrentPattern(TextPattern.Pattern, out var tp2)) RangeFor((TextPattern)tp2, now, Math.Min(caret, now.Length), 0)?.Select(); }
+                        catch { }
+                    });
                 }
-                if (now != before && now != null) break;
+                Store.Shared.Prefs.FixesAccepted++;
+                Store.Shared.Save();
+                issues.Remove(issue);
+                lastText = now; checkedText = null; measuredFor = "";
+                Changed?.Invoke();
+                return true;
             }
             checkedText = null;
             return false;
@@ -357,20 +387,4 @@ public sealed class Everywhere : IDisposable
         return null;
     }
 
-    /// Pastes text into the focused control and restores the clipboard afterwards.
-    static void Paste(string s)
-    {
-        IDataObject? saved = null;
-        try { saved = Clipboard.GetDataObject(); } catch { }
-        try
-        {
-            if (s.Length == 0) SendKeys.SendWait("{DEL}");
-            else { Clipboard.SetText(s); SendKeys.SendWait("^v"); }
-        }
-        catch { }
-        Task.Delay(400).ContinueWith(_ =>
-        {
-            try { if (saved != null) Clipboard.SetDataObject(saved, true); } catch { }
-        }, TaskScheduler.FromCurrentSynchronizationContext());
-    }
 }

@@ -23,6 +23,8 @@ public class ProactiveTests
     [InlineData("I feel ill ", null)]
     [InlineData("I wont ", null)]
     [InlineData("visit www.teh ", null)]
+    [InlineData("that is, i.", null)]
+    [InlineData("i.e. ", null)]
     public void Autocorrect(string input, string? expected) => Assert.Equal(expected, Ac(input));
 
     [Fact]

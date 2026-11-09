@@ -120,7 +120,8 @@ struct TextEditorView: NSViewRepresentable {
             pop.behavior = .transient
             pop.contentViewController = NSHostingController(rootView: SynonymCard(word: word, synonyms: syns) { [weak self, weak pop] s in
                 pop?.close()
-                guard let tv = self?.textView, (tv.string as NSString).substring(with: range).trimmingCharacters(in: .whitespaces) == word else { return }
+                guard let tv = self?.textView, NSMaxRange(range) <= (tv.string as NSString).length,
+                      (tv.string as NSString).substring(with: range).trimmingCharacters(in: .whitespaces) == word else { return }
                 let rep = TextUtil.matchCase(s, like: word)
                 if tv.shouldChangeText(in: range, replacementString: rep) {
                     tv.textStorage?.replaceCharacters(in: range, with: rep)

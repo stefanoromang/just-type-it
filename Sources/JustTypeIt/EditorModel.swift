@@ -47,14 +47,17 @@ final class EditorModel: ObservableObject {
         guard new != text else { return }
         let delta = (new as NSString).length - (text as NSString).length
         text = new
-        // Shift AI suggestions after an edit so they stay attached until the next AI pass.
+        // Shift suggestions after an edit so underlines stay on the right words until the next check.
         if let tv = textView {
             let caret = tv.selectedRange().location
-            aiIssues = aiIssues.compactMap { i in
+            let shift: (Issue) -> Issue? = { i in
                 var i = i
                 if i.range.location >= caret - max(0, delta) { i.range.location += delta }
                 return TextUtil.substring(new, i.range) == i.original ? i : nil
             }
+            aiIssues = aiIssues.compactMap(shift)
+            issues = issues.compactMap(shift)
+            applyHighlights()
         }
         persist()
         recheck(immediate: false)
@@ -88,9 +91,22 @@ final class EditorModel: ObservableObject {
             found.append(a)
         }
         issues = found.filter { !ignored.contains(key($0)) }.sorted { $0.range.location < $1.range.location }
-        metrics = Metrics.compute(text, issues: issues)
+        scheduleMetrics()
         if let sel = selectedIssueID, !issues.contains(where: { $0.id == sel }) { selectedIssueID = nil }
         applyHighlights()
+    }
+
+    private var metricsTask: Task<Void, Never>?
+
+    /// Scores, readability and tone cover the whole document; they're refreshed after typing pauses.
+    private func scheduleMetrics() {
+        metricsTask?.cancel()
+        let quick = (text as NSString).length < 20_000
+        metricsTask = Task { @MainActor [weak self] in
+            if !quick { try? await Task.sleep(nanoseconds: 900_000_000) }
+            guard let self, !Task.isCancelled else { return }
+            self.metrics = Metrics.compute(self.text, issues: self.issues)
+        }
     }
 
     private func scheduleAI() {

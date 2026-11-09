@@ -87,10 +87,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MainActor.assumeIsolated { Store.shared.saveNow() }
     }
 
+    /// Set by the menu bar view; SwiftUI's way to (re)create the editor window after it was closed.
+    @MainActor static var openWindowAction: OpenWindowAction?
+
     static func openMain() {
         NSApp.activate(ignoringOtherApps: true)
-        if let w = NSApp.windows.first(where: { $0.title == "Just Type It" || $0.identifier?.rawValue == "main" }) {
+        if let w = NSApp.windows.first(where: { ($0.title == "Just Type It" || $0.identifier?.rawValue == "main") && $0.canBecomeMain }) {
             w.makeKeyAndOrderFront(nil)
+        } else {
+            MainActor.assumeIsolated { openWindowAction?(id: "main") }
         }
     }
 
@@ -114,8 +119,10 @@ final class ServiceProvider: NSObject {
 struct MenuBarContent: View {
     @ObservedObject var store: Store
     @ObservedObject var everywhere = Everywhere.shared
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
+        let _ = { AppDelegate.openWindowAction = openWindow }()
         if everywhere.running {
             if !everywhere.isTrusted {
                 Text("⚠️ Allow Accessibility to check other apps")

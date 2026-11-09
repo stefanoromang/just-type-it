@@ -17,7 +17,12 @@ static class Program
         if (args.Contains("--selftest")) return SelfTest.Run(args.SkipWhile(a => a != "--selftest").Skip(1).FirstOrDefault() ?? "selftest-report.txt");
 
         single = new Mutex(true, "JustTypeIt.SingleInstance", out bool first);
-        if (!first) return 0;
+        if (!first)
+        {
+            // Already running in the tray: ask it to show its window instead of exiting silently.
+            try { using var show = EventWaitHandle.OpenExisting("JustTypeIt.ShowWindow"); show.Set(); } catch { }
+            return 0;
+        }
         ApplicationConfiguration.Initialize();
         try
         {
@@ -31,6 +36,12 @@ static class Program
     }
 
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+
+    public static bool IsStartWithWindows()
+    {
+        try { using var key = Registry.CurrentUser.OpenSubKey(RunKey); return key?.GetValue("JustTypeIt") != null; }
+        catch { return false; }
+    }
 
     public static void SetStartWithWindows(bool on)
     {
@@ -55,6 +66,8 @@ sealed class TrayApp : ApplicationContext
     public TrayApp(bool showWindow)
     {
         tray.Icon = Program.AppIcon;
+        // The installer's choice (Run key present or not) wins on first launch; afterwards the tray toggle decides.
+        if (!Store.Shared.Prefs.Onboarded) { Store.Shared.Prefs.StartWithWindows = Program.IsStartWithWindows(); Store.Shared.Save(); }
         var menu = new ContextMenuStrip();
         var status = new ToolStripMenuItem("Checking as you type in every app") { Enabled = false };
         menu.Items.Add(status);
@@ -95,10 +108,16 @@ sealed class TrayApp : ApplicationContext
         };
         tray.ContextMenuStrip = menu;
         tray.DoubleClick += (_, _) => ShowWindow();
-        hotkeys.Register(1, Keys.G, QuickCheck.Run);
-        hotkeys.Register(2, Keys.R, RewriteWindow.Run);
-        Program.SetStartWithWindows(Store.Shared.Prefs.StartWithWindows);
+        var failed = new List<string>();
+        if (!hotkeys.Register(1, Keys.G, QuickCheck.Run)) failed.Add("Ctrl+Alt+G");
+        if (!hotkeys.Register(2, Keys.R, RewriteWindow.Run)) failed.Add("Ctrl+Alt+R");
+        if (failed.Count > 0)
+            tray.ShowBalloonTip(6000, "Shortcut unavailable", $"{string.Join(" and ", failed)} is used by another app. Use the tray menu instead.", ToolTipIcon.Warning);
         if (Store.Shared.Prefs.CheckEverywhere) Everywhere.Shared.Start();
+        // A second launch (Start menu, desktop shortcut) signals this instance to show its window.
+        var showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, "JustTypeIt.ShowWindow");
+        var ui = SynchronizationContext.Current;
+        ThreadPool.RegisterWaitForSingleObject(showSignal, (_, _) => ui?.Post(_ => ShowWindow(), null), null, -1, false);
         if (showWindow) ShowWindow();
         if (!Store.Shared.Prefs.Onboarded)
         {
@@ -129,7 +148,7 @@ sealed class HotkeyWindow : NativeWindow, IDisposable
     [DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr h, int id);
     readonly Dictionary<int, Action> actions = new();
     public HotkeyWindow() => CreateHandle(new CreateParams());
-    public void Register(int id, Keys key, Action a) { actions[id] = a; RegisterHotKey(Handle, id, 0x0001 | 0x0002 | 0x4000, (uint)key); }
+    public bool Register(int id, Keys key, Action a) { actions[id] = a; return RegisterHotKey(Handle, id, 0x0001 | 0x0002 | 0x4000, (uint)key); }
     protected override void WndProc(ref Message m)
     {
         if (m.Msg == 0x0312 && actions.TryGetValue((int)m.WParam, out var a)) a();
@@ -143,29 +162,25 @@ static class QuickCheck
 {
     public static async void Run()
     {
-        IDataObject? saved = null;
-        try { saved = Clipboard.GetDataObject(); Clipboard.Clear(); } catch { }
-        SendKeys.SendWait("^c");
-        await Task.Delay(150);
-        string text = "";
-        try { if (Clipboard.ContainsText()) text = Clipboard.GetText(); } catch { }
-        try { if (saved != null) Clipboard.SetDataObject(saved, true); } catch { }
-        if (text.Trim().Length == 0)
+        try
         {
-            MessageBox.Show("Select some text in any app, then press Ctrl+Alt+G.", "Just Type It");
-            return;
+            var source = InputHelper.GetForegroundWindow();
+            var text = await InputHelper.CopySelection(Keys.G);
+            if (text.Trim().Length == 0)
+            {
+                MessageBox.Show("Select some text in any app, then press Ctrl+Alt+G.", "Just Type It");
+                return;
+            }
+            var normalized = text.Replace("\r\n", "\n");
+            var issues = RuleEngine.Check(normalized, Store.Shared.Options());
+            var fixedText = Rewriter.ApplyIssues(normalized, issues);
+            var summary = issues.Count == 0 ? "No suggestions — looks great!" : string.Join("\n", issues.Take(12).Select(i => "• " + i));
+            var answer = MessageBox.Show($"{summary}\n\nReplace the selected text with the corrected version?", "Just Type It – Quick Check",
+                issues.Any(i => i.Replacements.Count > 0) ? MessageBoxButtons.YesNo : MessageBoxButtons.OK);
+            if (answer != DialogResult.Yes) return;
+            if (!await RewriteWindow.ReturnTo(source)) { Clipboard.SetText(fixedText.Replace("\n", "\r\n")); MessageBox.Show("Couldn't switch back to the app. The corrected text is on your clipboard; press Ctrl+V to paste it.", "Just Type It"); return; }
+            await InputHelper.Paste(fixedText);
         }
-        var issues = RuleEngine.Check(text.Replace("\r\n", "\n"), Store.Shared.Options());
-        var fixedText = text.Replace("\r\n", "\n");
-        foreach (var i in issues.Where(x => x.Replacements.Count > 0 && x.Length <= 80).OrderByDescending(x => x.Start))
-            fixedText = fixedText.Remove(i.Start, i.Length).Insert(i.Start, i.Replacements[0]);
-        var summary = issues.Count == 0 ? "No suggestions — looks great!" : string.Join("\n", issues.Take(12).Select(i => "• " + i));
-        var answer = MessageBox.Show($"{summary}\n\nReplace the selected text with the corrected version?", "Just Type It – Quick Check",
-            issues.Any(i => i.Replacements.Count > 0) ? MessageBoxButtons.YesNo : MessageBoxButtons.OK);
-        if (answer != DialogResult.Yes) return;
-        await Task.Delay(200);
-        try { Clipboard.SetText(fixedText.Replace("\n", "\r\n")); SendKeys.SendWait("^v"); } catch { }
-        await Task.Delay(400);
-        try { if (saved != null) Clipboard.SetDataObject(saved, true); } catch { }
+        catch (Exception e) { MessageBox.Show("Quick Check couldn't finish: " + e.Message, "Just Type It"); }
     }
 }

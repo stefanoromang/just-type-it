@@ -43,7 +43,16 @@ final class Store: ObservableObject {
         dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("JustTypeIt")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         if let d = try? Data(contentsOf: dir.appendingPathComponent("prefs.json")), let p = try? JSONDecoder().decode(Prefs.self, from: d) { prefs = p }
-        if let d = try? Data(contentsOf: dir.appendingPathComponent("documents.json")), let docs = try? JSONDecoder().decode([Document].self, from: d) { documents = docs }
+        let docsURL = dir.appendingPathComponent("documents.json")
+        if let d = try? Data(contentsOf: docsURL) {
+            if let docs = try? JSONDecoder().decode([Document].self, from: d) {
+                documents = docs
+            } else {
+                // Never lose documents: keep the unreadable file as a backup before anything is saved.
+                let backup = dir.appendingPathComponent("documents-backup-\(Int(Date().timeIntervalSince1970)).json")
+                try? FileManager.default.copyItem(at: docsURL, to: backup)
+            }
+        }
         if let d = try? Data(contentsOf: dir.appendingPathComponent("stats.json")), let s = try? JSONDecoder().decode(Stats.self, from: d) { stats = s }
         if documents.isEmpty { documents = [Document(title: "Welcome to Just Type It", text: Store.welcomeText)] }
     }

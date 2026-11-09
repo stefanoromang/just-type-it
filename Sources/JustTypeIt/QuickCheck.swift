@@ -56,10 +56,25 @@ final class QuickCheck {
         panel?.close()
         guard let result, let app = sourceApp else { return }
         app.activate()
-        Task {
-            try? await Task.sleep(nanoseconds: 250_000_000)
+        Task { @MainActor in
+            guard await Self.waitUntilFrontmost(app) else {
+                copyWithNotice(result, "Couldn't switch back to \(app.localizedName ?? "the app"). The corrected text is on your clipboard; press ⌘V to paste it.")
+                return
+            }
             pastePublic(result)
         }
+    }
+
+    /// Waits (up to 2 s) until the given app is really in front, so a paste never lands in the wrong window.
+    static func waitUntilFrontmost(_ app: NSRunningApplication) async -> Bool {
+        for _ in 0..<40 {
+            if NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier {
+                try? await Task.sleep(nanoseconds: 120_000_000)   // let its window take focus
+                return true
+            }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        return false
     }
 
     /// Saves every clipboard item and format, so restoring never loses images or rich text.
@@ -89,7 +104,8 @@ final class QuickCheck {
         let change = pb.changeCount
         sendKey(CGKeyCode(kVK_ANSI_V))
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 450_000_000)
+            // Electron apps (Slack, Teams, Notion) read the clipboard slowly; wait before restoring.
+            try? await Task.sleep(nanoseconds: 900_000_000)
             Self.restoreClipboard(saved, ifUnchangedSince: change)
         }
     }
@@ -100,12 +116,8 @@ final class QuickCheck {
         // Accessibility first, then ⌘C as a fallback.
         if AXIsProcessTrusted() {
             let sys = AXUIElementCreateSystemWide()
-            var f: CFTypeRef?
-            if AXUIElementCopyAttributeValue(sys, kAXFocusedUIElementAttribute as CFString, &f) == .success, let f {
-                var sel: CFTypeRef?
-                if AXUIElementCopyAttributeValue(f as! AXUIElement, kAXSelectedTextAttribute as CFString, &sel) == .success,
-                   let s = sel as? String, !s.isEmpty { return s }
-            }
+            if let f = FocusedEditor.element(sys, kAXFocusedUIElementAttribute),
+               let s = FocusedEditor.string(f, kAXSelectedTextAttribute), !s.isEmpty { return s }
         } else {
             let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
             _ = AXIsProcessTrustedWithOptions(opts)
@@ -114,11 +126,18 @@ final class QuickCheck {
         let saved = Self.saveClipboard()
         let before = pb.changeCount
         sendKey(CGKeyCode(kVK_ANSI_C))
-        for _ in 0..<25 {
+        for _ in 0..<50 {
             try? await Task.sleep(nanoseconds: 20_000_000)
             if pb.changeCount != before { break }
         }
-        guard pb.changeCount != before else { return nil }
+        guard pb.changeCount != before else {
+            // Slow app: if the copy lands late, still put the user's clipboard back.
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                if pb.changeCount != before { Self.restoreClipboard(saved, ifUnchangedSince: pb.changeCount) }
+            }
+            return nil
+        }
         let s = pb.string(forType: .string)
         Self.restoreClipboard(saved, ifUnchangedSince: pb.changeCount)
         return s

@@ -46,9 +46,10 @@ jobs:
       - name: Installer + portable zip
         shell: pwsh
         run: |
-          choco install innosetup --no-progress -y
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" windows\installer\JustTypeIt.iss
+          # One version number (from the .csproj) for both the installer and the zip.
           $v = ([xml](Get-Content windows/JustTypeIt/JustTypeIt.csproj)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+          choco install innosetup --no-progress -y
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$v" windows\installer\JustTypeIt.iss
           Compress-Archive -Path windows/dist/JustTypeIt/* -DestinationPath "windows/dist/JustTypeIt-$v-win-x64-portable.zip"
       - uses: actions/upload-artifact@v5
         if: always()

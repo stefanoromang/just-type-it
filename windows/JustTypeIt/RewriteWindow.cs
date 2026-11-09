@@ -26,7 +26,7 @@ public sealed class RewriteWindow : Form
     public static async void Run()
     {
         var src = GetForegroundWindow();
-        var text = await CopySelection();
+        var text = await InputHelper.CopySelection(Keys.R);
         if (string.IsNullOrWhiteSpace(text))
         {
             MessageBox.Show("Highlight some text in any app, then press Ctrl+Alt+R to rewrite it.", "Just Type It");
@@ -138,51 +138,28 @@ public sealed class RewriteWindow : Form
         var text = result.Text;
         if (text.Length == 0) return;
         Close();
-        SetForegroundWindow(sourceWindow);
-        await Task.Delay(250);
+        if (!await ReturnTo(sourceWindow))
+        {
+            try { Clipboard.SetText(text.Replace("\r\n", "\n").Replace("\n", "\r\n")); } catch { }
+            MessageBox.Show("Couldn't switch back to the app. The rewrite is on your clipboard; press Ctrl+V to paste it.", "Just Type It");
+            return;
+        }
         // The original selection is still active in the source app: paste over it.
-        var saved = SaveClipboard();
-        try { Clipboard.SetText(text.Replace("\r\n", "\n").Replace("\n", "\r\n")); SendKeys.SendWait("^v"); } catch { }
-        await Task.Delay(400);
-        RestoreClipboard(saved);
+        await InputHelper.Paste(text);
         Store.Shared.Prefs.Rewrites++;
         Store.Shared.Save();
     }
 
-    // MARK: Clipboard helpers (all formats are restored, not just text)
-
-    static IDataObject? SaveClipboard()
+    /// Brings the source window back and waits until it's really in front, so a paste never lands elsewhere.
+    public static async Task<bool> ReturnTo(IntPtr window)
     {
-        try
+        for (int i = 0; i < 20; i++)
         {
-            var src = Clipboard.GetDataObject();
-            if (src == null) return null;
-            var copy = new DataObject();
-            foreach (var f in src.GetFormats(false))
-                try { var d = src.GetData(f, false); if (d != null) copy.SetData(f, d); } catch { }
-            return copy;
+            SetForegroundWindow(window);
+            await Task.Delay(60);
+            if (InputHelper.GetForegroundWindow() == window) { await Task.Delay(80); return true; }
         }
-        catch { return null; }
+        return false;
     }
 
-    static void RestoreClipboard(IDataObject? saved)
-    {
-        try { if (saved != null) Clipboard.SetDataObject(saved, true); } catch { }
-    }
-
-    /// Copies the current selection in the foreground app (Ctrl+C), then restores the clipboard.
-    public static async Task<string> CopySelection()
-    {
-        var saved = SaveClipboard();
-        try { Clipboard.Clear(); } catch { }
-        SendKeys.SendWait("^c");
-        string text = "";
-        for (int i = 0; i < 15 && text.Length == 0; i++)
-        {
-            await Task.Delay(40);
-            try { if (Clipboard.ContainsText()) text = Clipboard.GetText(); } catch { }
-        }
-        RestoreClipboard(saved);
-        return text;
-    }
 }

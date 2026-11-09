@@ -3,7 +3,9 @@
 ; https://github.com/stefanoromang/just-type-it
 
 #define AppName "Just Type It"
-#define AppVersion "1.3.0"
+#ifndef AppVersion
+  #define AppVersion "1.4.0"
+#endif
 #define AppPublisher "Stefano Roman Gunness"
 #define AppURL "https://github.com/stefanoromang/just-type-it"
 #define AppExe "JustTypeIt.exe"
@@ -60,6 +62,8 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 Filename: "{app}\{#AppExe}"; Description: "Launch Just Type It"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
+; Always remove the startup entry, even if the app added it later from its tray menu.
+Filename: "{sys}\reg.exe"; Parameters: "delete ""HKCU\Software\Microsoft\Windows\CurrentVersion\Run"" /v JustTypeIt /f"; Flags: runhidden; RunOnceId: "RemoveRunKey"
 Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM {#AppExe} /FI ""USERNAME eq {username}"""; Flags: runhidden; RunOnceId: "KillApp"
 
 [UninstallDelete]

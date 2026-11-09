@@ -20,6 +20,17 @@ The checking happens **on your Mac**. It uses Apple's built-in spelling and gram
 
 ## Features
 
+### What's new in 1.4 — more accurate, safer, fully reviewed
+- **Catches more real mistakes.** A new set of 46 everyday business-writing errors is now caught in full: *send me there contact details*, *for you're help*, *whose going*, *Lets meet*, *since five years*, *the amount of people*, *will effect everyone*, *very unique*, and comma splices like *Thank you for your email, I will review it today*. The original 64-error set is still caught in full.
+- **Fewer false alarms.** A set of 51 tricky but correct sentences (*an MBA*, *a one-time fee*, *assess the risks*, *the most honest*, *If you need anything else, please let me know*, *None of the files were…*, *that that*, *If I were you*) gets no grammar or spelling flags. "The team are…" is accepted in British, Australian, Canadian and Indian English.
+- **Every source file reviewed** on Mac and Windows. Fixed:
+  - Rewrite and Quick Check could paste into the wrong window or insert twice when an app was slow. They now wait until your app is really in front and verify the text; otherwise the result goes to your clipboard with a message.
+  - Windows: Ctrl+Alt+G / Ctrl+Alt+R could type "©" in Word because the keys were still held. They now wait for the keys to be released.
+  - Windows: Quick Check could garble text when suggestions overlapped; autocorrect moved the cursor to the end of the document; the clipboard could be restored too early in slow apps; old suggestions stayed after switching text boxes.
+  - Mac: saved documents can no longer be lost if a file can't be read (a backup is kept); "Open Just Type It" reopens the editor after it was closed; several rare crashes in unusual apps; autocorrect no longer changes "i.e."; turning off checking stops all background work.
+  - Windows: high-DPI screens, starting the app twice now shows its window, the startup choice is respected and removed on uninstall, and installer and portable versions share one version number.
+- Automated checks now fail if accuracy drops or correct writing gets a grammar flag, on both platforms.
+
 ### What's new in 1.3 — rewrite anything, anywhere
 - **Rewrite highlighted text in any app.** Highlight text in Outlook, Word, Excel, Gmail, Notes or anywhere else, then press **⌃⌥R** (Mac) / **Ctrl+Alt+R** (Windows) or click the ✨ button that appears next to the selection. Choose a style and pick from up to three versions; changes are highlighted, you can edit the result, and **Replace** puts it back exactly where the selection was.
 - **17 styles:** Improve it, More professional, More casual, Shorter, Longer, More enthusiastic, Friendlier, More confident, Clearer, Simpler, More formal, More diplomatic, More persuasive, Fix grammar only, Bullet points, Summarize, Write a reply. You can also type your own instruction (“make it sound like a thank-you note”).

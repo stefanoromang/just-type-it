@@ -2,6 +2,7 @@
 // MIT License · https://github.com/stefanoromang/just-type-it
 
 import AppKit
+import Combine
 import SwiftUI
 
 /// First-run setup: explains always-on checking and walks through the Accessibility permission.

@@ -16,7 +16,9 @@ jobs:
       - name: Build
         run: swift build -c release
       - name: Grammar tests (64-error recall + clean-writing false alarms)
-        run: .build/release/JustTypeIt --self-test --errors Tests/error-corpus.txt --corpus Tests/clean-corpus.txt
+        run: |
+          .build/release/JustTypeIt --self-test --errors Tests/error-corpus.txt --corpus Tests/clean-corpus.txt
+          .build/release/JustTypeIt --self-test --errors Tests/hard-errors.txt --corpus Tests/clean-tricky.txt
       - name: Outlook compatibility tests
         run: zsh scripts/test-outlook-compatibility.sh
       - name: Shared rules are up to date for Windows

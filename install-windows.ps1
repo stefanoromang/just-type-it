@@ -30,8 +30,12 @@ if (-not $zip) { Write-Host "The Windows version isn't published yet. See https:
 Write-Host "Downloading $($zip.name) ($([math]::Round($zip.size / 1MB)) MB)..."
 $tmp = Join-Path $env:TEMP $zip.name
 Invoke-WebRequest $zip.browser_download_url -OutFile $tmp -UseBasicParsing
-Get-Process JustTypeIt -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq (Get-Process -Id $PID).SessionId } | Stop-Process -Force -ErrorAction SilentlyContinue
-Start-Sleep -Milliseconds 500
+$running = Get-Process JustTypeIt -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq (Get-Process -Id $PID).SessionId }
+$running | Stop-Process -Force -ErrorAction SilentlyContinue
+$running | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
+# If the setup program was used before, uninstall it cleanly first so Add/Remove Programs stays correct.
+$uninstaller = Join-Path $appDir "unins000.exe"
+if (Test-Path $uninstaller) { Start-Process $uninstaller -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait }
 if (Test-Path $appDir) { Remove-Item $appDir -Recurse -Force }
 New-Item -ItemType Directory -Path $appDir -Force | Out-Null
 Expand-Archive $tmp -DestinationPath $appDir -Force

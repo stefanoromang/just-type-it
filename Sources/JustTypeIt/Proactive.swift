@@ -52,6 +52,10 @@ enum Proactive {
         guard range.length > 0 else { return nil }
         let word = ns.substring(with: range)
         let lower = word.lowercased()
+        // Abbreviations: "i.e.", "e.g.", "U.S." — a letter right before or after a period isn't a word end.
+        if start > 0, ns.substring(with: NSRange(location: start - 1, length: 1)) == "." { return nil }
+        if trigger == ".", caret < ns.length, ns.substring(with: NSRange(location: caret, length: 1)).rangeOfCharacter(from: .letters) != nil { return nil }
+        if trigger == ".", word.count == 1 { return nil }
         guard !dictionary.contains(lower), let fix = autocorrections[lower] else { return nil }
         // Skip words inside URLs, emails, @mentions, file paths and code.
         if start > 0 {

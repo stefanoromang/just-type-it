@@ -116,6 +116,10 @@ enum SelfTest {
             ("i went home.", ["I"]),
         ]
         var fails = 0
+        // Every grammar rule must compile; a broken pattern would silently disable it.
+        let broken = (RuleData.grammar + GrammarRules.all).filter { TextUtil.regex($0.pattern, caseInsensitive: $0.caseInsensitive) == nil }
+        for b in broken { print("FAIL | rule does not compile:", b.title, b.pattern.prefix(80)) }
+        if !broken.isEmpty { fails += 1 } else { print("PASS | all \(RuleData.grammar.count + GrammarRules.all.count) grammar rules compile") }
         var o = CheckOptions()
         o.goals = Goals()
         for (s, expect) in samples {
@@ -135,7 +139,7 @@ enum SelfTest {
         let acCases: [(String, String?)] = [
             ("I think teh ", "I think the "), ("Teh ", "The "), ("we dont ", "we don't "), ("recieved,", "received,"),
             ("i ", "I "), ("He said im ", "He said I'm "), ("email me@teh ", nil), ("the ", nil), ("Ill ", nil),
-            ("I feel ill ", nil), ("I wont ", nil), ("visit www.teh ", nil),
+            ("I feel ill ", nil), ("I wont ", nil), ("visit www.teh ", nil), ("that is, i.", nil), ("i.e. ", nil),
         ]
         for (input, expected) in acCases {
             let got = ac(input)
@@ -166,6 +170,9 @@ enum SelfTest {
             let found = RuleEngine.check(corpus, options: o).filter { $0.group == .correctness || $0.group == .clarity }
             print("corpus correctness/clarity flags:", found.count)
             for f in found { print("    CORPUS:", f.original.prefix(60), "→", f.replacements.first ?? "-", "[\(f.title)]") }
+            // Correct writing must never get a grammar or spelling error (style hints are fine).
+            let errors = found.filter { $0.group == .correctness }
+            if !errors.isEmpty { fails += 1; print("FAIL: \(errors.count) correctness flags on correct writing") }
         }
         if let i = CommandLine.arguments.firstIndex(of: "--errors"), i + 1 < CommandLine.arguments.count,
            let corpus = try? String(contentsOfFile: CommandLine.arguments[i + 1], encoding: .utf8) {
@@ -176,6 +183,7 @@ enum SelfTest {
                 if f.isEmpty { print("    MISSED:", l) } else { caught += 1; print("    caught:", l, "=>", f.map { "\($0.original)→\($0.replacements.first ?? "-")" }.joined(separator: "; ")) }
             }
             print("error recall: \(caught)/\(lines.count)")
+            if caught < lines.count { fails += 1 }
         }
         if let i = CommandLine.arguments.firstIndex(of: "--sample"), i + 1 < CommandLine.arguments.count,
            let t = try? String(contentsOfFile: CommandLine.arguments[i + 1], encoding: .utf8) {

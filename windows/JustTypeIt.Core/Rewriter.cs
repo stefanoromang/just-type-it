@@ -96,7 +96,8 @@ public static class Rewriter
         ("Please let me know", "Let me know"), ("Kind regards", "Cheers"), ("Best regards", "Thanks"),
     };
 
-    static string ApplyIssues(string text, IEnumerable<Issue> issues)
+    /// Applies every fix from the end backwards, skipping overlapping suggestions.
+    public static string ApplyIssues(string text, IEnumerable<Issue> issues)
     {
         var result = text;
         int lastStart = int.MaxValue;

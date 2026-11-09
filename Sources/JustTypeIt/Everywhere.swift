@@ -29,6 +29,7 @@ final class Everywhere: ObservableObject {
     private var dismissed: Set<String> = []
     private var mouseMonitor: Any?
     private var keyMonitor: Any?
+    private var activationObserver: NSObjectProtocol?
     private var enhancedPIDs: Set<pid_t> = []
     private var aiIssues: [Issue] = []
     private var aiTask: Task<Void, Never>?
@@ -66,7 +67,7 @@ final class Everywhere: ObservableObject {
                 if s.timer?.fireDate.timeIntervalSinceNow ?? 0 > 0.3 { s.scheduleTick(0.15) }
             }
         }
-        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { _ in
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated { Everywhere.shared.scheduleTick(0.1) }
         }
         mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp]) { e in
@@ -94,6 +95,10 @@ final class Everywhere: ObservableObject {
     func stop() {
         timer?.invalidate()
         timer = nil
+        pendingAutocorrect?.cancel()
+        aiTask?.cancel()
+        if let o = activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(o) }
+        activationObserver = nil
         if let m = mouseMonitor { NSEvent.removeMonitor(m) }
         if let m = keyMonitor { NSEvent.removeMonitor(m) }
         mouseMonitor = nil
@@ -196,7 +201,7 @@ final class Everywhere: ObservableObject {
         var text = full
         let window = 6000
         if ns.length > window * 2 {
-            let caret = selectedRange(el)?.location ?? 0
+            let caret = min(max(0, selectedRange(el)?.location ?? 0), ns.length)
             var start = max(0, caret - window)
             var end = min(ns.length, caret + window)
             let before = ns.substring(to: start)
@@ -308,13 +313,34 @@ final class Everywhere: ObservableObject {
                    tone: Store.shared.prefs.showTone ? Proactive.toneEmoji(lastText)?.emoji : nil, near: frame)
     }
 
+    /// Reads typed AXValues safely; nil if the app returns anything else.
+    private static func checked(_ ref: CFTypeRef?, _ type: AXValueType) -> AXValue? {
+        guard let ref, CFGetTypeID(ref) == AXValueGetTypeID() else { return nil }
+        let v = ref as! AXValue
+        return AXValueGetType(v) == type ? v : nil
+    }
+    static func axPoint(_ ref: CFTypeRef?) -> CGPoint? {
+        guard let v = checked(ref, .cgPoint) else { return nil }
+        var p = CGPoint.zero; return AXValueGetValue(v, .cgPoint, &p) ? p : nil
+    }
+    static func axSize(_ ref: CFTypeRef?) -> CGSize? {
+        guard let v = checked(ref, .cgSize) else { return nil }
+        var s = CGSize.zero; return AXValueGetValue(v, .cgSize, &s) ? s : nil
+    }
+    static func axRect(_ ref: CFTypeRef?) -> CGRect? {
+        guard let v = checked(ref, .cgRect) else { return nil }
+        var r = CGRect.zero; return AXValueGetValue(v, .cgRect, &r) ? r : nil
+    }
+
+    private func frame(of el: AXUIElement) -> CGRect? {
+        guard let pt = Everywhere.axPoint(FocusedEditor.attribute(el, kAXPositionAttribute)),
+              let sz = Everywhere.axSize(FocusedEditor.attribute(el, kAXSizeAttribute)) else { return nil }
+        return CGRect(origin: pt, size: sz)
+    }
+
     private func elementFrame(_ el: AXUIElement) -> NSRect? {
-        var p: CFTypeRef?, s: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(el, kAXPositionAttribute as CFString, &p) == .success,
-              AXUIElementCopyAttributeValue(el, kAXSizeAttribute as CFString, &s) == .success, let p, let s else { return nil }
-        var pt = CGPoint.zero, sz = CGSize.zero
-        AXValueGetValue(p as! AXValue, .cgPoint, &pt)
-        AXValueGetValue(s as! AXValue, .cgSize, &sz)
+        guard let f = frame(of: el) else { return nil }
+        let pt = f.origin, sz = f.size
         guard sz.width > 10, sz.height > 8 else { return nil }
         var r = toCocoa(CGRect(origin: pt, size: sz))
         // Web and Office editors report the whole scrollable page; clip to the visible window.
@@ -324,16 +350,8 @@ final class Everywhere: ObservableObject {
     }
 
     private func windowFrame(_ el: AXUIElement) -> NSRect? {
-        var w: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(el, kAXWindowAttribute as CFString, &w) == .success, let w else { return nil }
-        let win = w as! AXUIElement
-        var p: CFTypeRef?, s: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(win, kAXPositionAttribute as CFString, &p) == .success,
-              AXUIElementCopyAttributeValue(win, kAXSizeAttribute as CFString, &s) == .success, let p, let s else { return nil }
-        var pt = CGPoint.zero, sz = CGSize.zero
-        AXValueGetValue(p as! AXValue, .cgPoint, &pt)
-        AXValueGetValue(s as! AXValue, .cgSize, &sz)
-        return toCocoa(CGRect(origin: pt, size: sz))
+        guard let win = FocusedEditor.element(el, kAXWindowAttribute), let f = frame(of: win) else { return nil }
+        return toCocoa(f)
     }
 
     /// One rect per line for a range (handles wrapped phrases).
@@ -355,10 +373,8 @@ final class Everywhere: ObservableObject {
         var r = CFRange(location: range.location, length: range.length)
         guard let v = AXValueCreate(.cfRange, &r) else { return nil }
         var out: CFTypeRef?
-        guard AXUIElementCopyParameterizedAttributeValue(el, kAXBoundsForRangeParameterizedAttribute as CFString, v, &out) == .success, let out else { return nil }
-        var rect = CGRect.zero
-        AXValueGetValue(out as! AXValue, .cgRect, &rect)
-        guard rect.width > 0 || rect.height > 0 else { return nil }
+        guard AXUIElementCopyParameterizedAttributeValue(el, kAXBoundsForRangeParameterizedAttribute as CFString, v, &out) == .success,
+              let rect = Everywhere.axRect(out), rect.width > 0 || rect.height > 0 else { return nil }
         return toCocoa(rect)
     }
 
@@ -468,7 +484,8 @@ final class Everywhere: ObservableObject {
 
     @Published private(set) var lastAutocorrect: Proactive.Correction?
 
-    private var autocorrected: Set<Int> = []
+    private var autocorrected: Set<String> = []
+    private func attemptKey(_ f: Proactive.Correction) -> String { "\(f.range.location)|\(f.original)" }
 
     /// Fixes obvious typos in the words just finished before the cursor (fast typists can finish
     /// several words between two checks). Undo with ⌘Z.
@@ -480,7 +497,7 @@ final class Everywhere: ObservableObject {
         let from = max(0, caret - 60)
         var fixes: [Proactive.Correction] = []
         for i in stride(from: caret, to: from, by: -1) where i <= ns.length {
-            guard let f = Proactive.autocorrect(full, caret: i, dictionary: dict), !autocorrected.contains(f.range.location) else { continue }
+            guard let f = Proactive.autocorrect(full, caret: i, dictionary: dict), !autocorrected.contains(attemptKey(f)) else { continue }
             if !fixes.contains(where: { $0.range.location == f.range.location }) { fixes.append(f) }
         }
         guard !fixes.isEmpty else { return }
@@ -488,7 +505,7 @@ final class Everywhere: ObservableObject {
         // Wait for a short pause in typing so a correction never lands in the middle of a keystroke.
         pendingAutocorrect = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 450_000_000)
-            guard let self, !Task.isCancelled, self.lastText == full, self.string(el, kAXValueAttribute) == full,
+            guard let self, !Task.isCancelled, !self.applyingCorrection, self.lastText == full, self.string(el, kAXValueAttribute) == full,
                   self.selectedRange(el)?.location == caret else { return }
             // Apply every finished typo from the end backwards so earlier offsets stay valid.
             var snapshot = full
@@ -508,7 +525,9 @@ final class Everywhere: ObservableObject {
         defer { applyingCorrection = false }
         let ok = await AccessibilityEdit.apply(editor: el, appPID: pid, bundleID: bundleID, snapshot: snapshot,
                                                 range: fix.range, original: fix.original, replacement: fix.replacement)
-        autocorrected.insert(fix.range.location)
+        // Remember failures too (by position and word) so a field that can't be edited isn't retried forever;
+        // a different word typed at the same spot still gets corrected.
+        autocorrected.insert(attemptKey(fix))
         guard ok else { return false }
         let delta = (fix.replacement as NSString).length - fix.range.length
         var cf = CFRange(location: caret + delta, length: 0)
@@ -804,7 +823,7 @@ struct EverywhereSummary: View {
             if !warnings.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(warnings, id: \.title) { w in
-                        Label { Text(w.title).font(.caption.weight(.semibold)) + Text(" · " + w.detail).font(.caption) } icon: {
+                        Label { Text("\(Text(w.title).bold()) · \(w.detail)").font(.caption) } icon: {
                             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                         }
                     }

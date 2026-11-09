@@ -64,6 +64,25 @@ public class EngineTests
     }
 
     [Fact]
+    public void HardErrorRecall()
+    {
+        var lines = File.ReadAllLines("hard-errors.txt").Where(l => l.Trim().Length > 0).ToList();
+        var missed = lines.Where(l => !Check(l).Any(i => i.Group == IssueGroup.Correctness)).ToList();
+        foreach (var m in missed) log.WriteLine("MISSED: " + m);
+        log.WriteLine($"hard recall {lines.Count - missed.Count}/{lines.Count}");
+        Assert.True(missed.Count <= 3, $"missed {missed.Count}: {string.Join(" | ", missed)}");
+    }
+
+    [Fact]
+    public void NoGrammarFlagsOnTrickyCorrectSentences()
+    {
+        var flags = File.ReadAllLines("clean-tricky.txt").Where(l => l.Trim().Length > 0)
+            .SelectMany(l => Check(l).Where(i => i.Group == IssueGroup.Correctness).Select(i => $"{l} :: {i}")).ToList();
+        foreach (var f in flags) log.WriteLine("FLAG: " + f);
+        Assert.True(flags.Count == 0, string.Join(" | ", flags));
+    }
+
+    [Fact]
     public void ContactDetailsAreNeverFlagged()
     {
         Assert.Empty(Check("E: stefano.roman@buyersedgeplatform.com www.buyersedgeplatform.com @stefanoromang C:\\Users\\Stefano\\file.txt"));

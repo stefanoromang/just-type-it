@@ -88,7 +88,7 @@ public static class Morph
         var ops = new (string tag, System.Func<string, string> f)[]
         {
             ("SINGNOUN", SingularNoun), ("PP", Participle), ("BASE", Base), ("ING", Ing), ("SING", ThirdPerson),
-            ("PLUR", Plural), ("ED", EdAdjective), ("OBJ", SubjectPronoun),
+            ("PLUR", Plural), ("ED", EdAdjective), ("OBJ", SubjectPronoun), ("CAP", w => w.Length == 0 ? w : char.ToUpperInvariant(w[0]) + w[1..]),
         };
         var outStr = s;
         foreach (var (tag, f) in ops)

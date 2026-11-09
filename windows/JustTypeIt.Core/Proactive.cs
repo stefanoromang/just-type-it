@@ -40,6 +40,9 @@ public static class Proactive
         if (len <= 0) return null;
         var word = text.Substring(start, len);
         var lower = word.ToLowerInvariant();
+        // Abbreviations: "i.e.", "e.g.", "U.S." are left alone.
+        if (start > 0 && text[start - 1] == '.') return null;
+        if (trigger == '.' && (word.Length == 1 || (caret < text.Length && char.IsLetter(text[caret])))) return null;
         if (dictionary != null && dictionary.Contains(lower)) return null;
         if (!Autocorrections.TryGetValue(lower, out var fix)) return null;
         if (start > 0 && "@#/\\._-`".IndexOf(text[start - 1]) >= 0) return null;

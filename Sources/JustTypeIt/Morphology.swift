@@ -97,7 +97,7 @@ enum Morph {
         var out = s
         let ops: [(String, (String) -> String)] = [
             ("PP", participle), ("BASE", base), ("ING", ing), ("SING", thirdPerson), ("PLUR", plural),
-            ("ED", edAdjective), ("SINGNOUN", singularNoun), ("OBJ", subjectPronoun),
+            ("ED", edAdjective), ("SINGNOUN", singularNoun), ("OBJ", subjectPronoun), ("CAP", { $0.prefix(1).uppercased() + $0.dropFirst() }),
         ]
         for (tag, f) in ops {
             for m in TextUtil.matches("\\b\(tag):([\\w']+)", in: out, caseInsensitive: false).reversed() {

@@ -99,6 +99,8 @@ public static class RuleEngine
     {
         foreach (var rule in RuleData.Shared.Grammar)
         {
+            // British, Australian, Canadian and Indian English allow "the team are".
+            if (rule.Kind == "Grammar/CollectiveNoun" && o.Dialect != Dialect.American) continue;
             MatchCollection ms;
             try { ms = rule.Regex.Matches(text); _ = ms.Count; }
             catch (RegexMatchTimeoutException) { continue; }
@@ -203,7 +205,7 @@ public static class RuleEngine
             foreach (var m in TextUtil.Matches(p, text, ci))
                 if (m.Length > 0) outList.Add(Make(m.Index, m.Length, m.Value, new[] { rep(m.Value) }, g, kind, title, why));
         }
-        Add(@"\b(\w+) \1\b", s => s.Split(' ')[0], "Grammar/RepeatedWord", "Repeated word", "The same word appears twice in a row.");
+        Add(@"\b(?!(?:that|had|is|bye|knock|ha)\s)(\w+) \1\b", s => s.Split(' ')[0], "Grammar/RepeatedWord", "Repeated word", "The same word appears twice in a row.");
         Add(@"(?<=\S)  +(?=\S)", _ => " ", "Punctuation/Spacing", "Extra space", "Use a single space between words.");
         Add(@"[ \t]+([,.;:!?])(?!\d)", s => s.Trim(), "Punctuation/Spacing", "Space before punctuation", "Punctuation attaches to the word before it.");
         Add(@"(?<=[a-z])([,;:])(?=[A-Za-z])", s => s + " ", "Punctuation/Spacing", "Missing space", "Add a space after a comma, semicolon or colon.", false);
@@ -279,7 +281,9 @@ public static class RuleEngine
                 outList.Add(Make(s.Start, s.Length, s.Text, Array.Empty<string>(), IssueGroup.Correctness, "Grammar/RunOn", "Run-on sentence", $"This sentence is {words.Length} words long with almost no punctuation. Split it into shorter sentences."));
             else if (words.Length >= 30)
                 outList.Add(Make(s.Start, s.Length, s.Text, Array.Empty<string>(), IssueGroup.Clarity, "Style/Clarity/LongSentence", "Long sentence", "Sentences over 30 words are hard to follow. Try splitting this one."));
-            bool greeting = Regex.IsMatch(s.Text, @"^(hi|hey|hello|dear|thanks|thank you|cheers|best|regards|sincerely|good (morning|afternoon|evening)|congrats|welcome|ok|okay|yes|no|sure)\b", RegexOptions.IgnoreCase);
+            bool greeting = Regex.IsMatch(s.Text, @"^(hi|hey|hello|dear|thanks|thank you|cheers|best|regards|sincerely|good (morning|afternoon|evening)|congrats|welcome|ok|okay|yes|no|sure|me too|you too|same here|of course|no problem|sounds good|got it|will do|see you)\b", RegexOptions.IgnoreCase)
+                // Imperatives ("Contact us at…", "Call me tomorrow.") start with a verb.
+                || Regex.IsMatch(s.Text, @"^(contact|call|email|visit|send|see|check|reply|join|let|please|click|read|review|note|remember|ask|tell|find|use|try|keep|bring|meet|enjoy|follow)\b", RegexOptions.IgnoreCase);
             if (words.Length >= 2 && words.Length <= 8 && !greeting && !s.Text.EndsWith('!') && !s.Text.EndsWith('?') && !s.Text.EndsWith(':')
                 && s.Text.EndsWith('.') && !TextUtil.HasVerb(s.Text)
                 && !words.Skip(1).Any(w => { var l = w.Trim('.', ',').ToLowerInvariant(); return l.EndsWith("es") || l.EndsWith("ed"); }))
