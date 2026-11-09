@@ -100,6 +100,8 @@ enum RuleEngine {
                     let local = rv.rangeValue
                     let range = NSRange(location: r.range.location + local.location, length: local.length)
                     let corr = (d["NSGrammarCorrections"] as? [String]) ?? []
+                    // Newer macOS versions pair a distant "I" with a later verb ("…person I know" → "is → am"); only trust "am" right after "I".
+                    if corr.first?.lowercased() == "am", !(text as NSString).substring(to: min(range.location, (text as NSString).length)).hasSuffix("I ") { continue }
                     let desc = (d["NSGrammarUserDescription"] as? String) ?? "Possible grammar issue."
                     let cat = (d["NSGrammarUserCategory"] as? String) ?? "Grammar"
                     out.append(Issue(range: range, original: TextUtil.substring(text, range), replacements: corr,
