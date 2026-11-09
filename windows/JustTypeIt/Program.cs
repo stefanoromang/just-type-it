@@ -88,6 +88,9 @@ sealed class TrayApp : ApplicationContext
         var tone = new ToolStripMenuItem("Show tone emoji") { Checked = Store.Shared.Prefs.ShowTone, CheckOnClick = true };
         tone.CheckedChanged += (_, _) => { Store.Shared.Prefs.ShowTone = tone.Checked; Store.Shared.Save(); };
         menu.Items.Add(tone);
+        var languages = new ToolStripMenuItem("Languages");
+        LanguageMenu.Fill(languages);
+        menu.Items.Add(languages);
         var pause = new ToolStripMenuItem("Pause checking");
         pause.DropDownItems.Add("For 1 hour", null, (_, _) => Everywhere.Shared.PausedUntil = DateTime.Now.AddHours(1));
         pause.DropDownItems.Add("Until tomorrow", null, (_, _) => Everywhere.Shared.PausedUntil = DateTime.Today.AddDays(1));

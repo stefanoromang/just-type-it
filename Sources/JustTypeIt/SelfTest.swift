@@ -22,10 +22,12 @@ enum SelfTest {
             "inclusive": StyleData.inclusive.map { ["term": $0.0, "alternatives": $0.1, "why": $0.2] as [String: Any] },
             "irregular": Morph.irregular.map { [$0.0, $0.1, $0.2] },
             "synonyms": Synonyms.table,
+            "spanish": SpanishRules.all.map(rule),
+            "languages": Language.all.map { ["code": $0.code, "name": $0.name, "native": $0.native] },
         ]
         guard let d = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]),
               (try? d.write(to: URL(fileURLWithPath: path))) != nil else { return 1 }
-        print("Exported \((RuleData.grammar + GrammarRules.all).count) grammar rules to \(path)")
+        print("Exported \((RuleData.grammar + GrammarRules.all).count) grammar rules, \(SpanishRules.all.count) Spanish rules and \(Language.all.count) languages to \(path)")
         return 0
     }
 
@@ -122,6 +124,7 @@ enum SelfTest {
         if !broken.isEmpty { fails += 1 } else { print("PASS | all \(RuleData.grammar.count + GrammarRules.all.count) grammar rules compile") }
         var o = CheckOptions()
         o.goals = Goals()
+        o.languages = ["en", "es"]
         for (s, expect) in samples {
             let issues = RuleEngine.check(s, options: o)
             let flat = issues.map { "\($0.original)→\($0.replacements.first ?? "-") [\($0.title)]" }
@@ -147,6 +150,16 @@ enum SelfTest {
             if !ok { fails += 1 }
             print(ok ? "PASS" : "FAIL", "| autocorrect", "“\(input)” →", got.map { "“\($0)”" } ?? "no change")
         }
+        for (t, want) in [("Their going to the store tomorow.", "en"), ("Habían muchas personas en la reunión.", "es"),
+                          ("Hi Sam,", "en"), ("Te mando el deck mañana.", "es"), ("Grazie per il tuo aiuto con il progetto.", "it")] {
+            let got = Language.detect(t, among: ["en", "es", "it"])
+            if got != want { fails += 1 }
+            print(got == want ? "PASS" : "FAIL", "| language of “\(t)” → \(got)")
+        }
+        let mixed = RuleEngine.check("Their going to the store.\n¿Que piensas del informe?", options: o)
+        let mixedOK = mixed.contains { $0.replacements.first == "They're going" } && mixed.contains { $0.replacements.first == "¿Qué" }
+        if !mixedOK { fails += 1 }
+        print(mixedOK ? "PASS" : "FAIL", "| English and Spanish in one text:", mixed.map { "\($0.original)→\($0.replacements.first ?? "-")" })
         let send = Proactive.preSendWarnings("Hi Sam, please see attached. This is unacceptable.", issues: [])
         let sendOK = send.contains { $0.title.contains("attachment") } && send.contains { $0.title.contains("harsh") }
         if !sendOK { fails += 1 }

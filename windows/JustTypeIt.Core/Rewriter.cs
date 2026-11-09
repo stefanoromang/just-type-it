@@ -222,7 +222,7 @@ public static class Rewriter
                 model = m, stream = false, options = new { temperature },
                 messages = new object[]
                 {
-                    new { role = "system", content = instruction + "\nKeep the original language. Do not invent facts. Output ONLY the resulting text, with no commentary or quotes." },
+                    new { role = "system", content = instruction + "\nKeep the original language (never translate). Do not invent facts. Output ONLY the resulting text, with no commentary or quotes." },
                     new { role = "user", content = "TEXT:\n<<<\n" + text + "\n>>>" },
                 },
             };

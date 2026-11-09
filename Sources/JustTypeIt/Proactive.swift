@@ -2,6 +2,7 @@
 // MIT License · https://github.com/stefanoromang/just-type-it
 
 import Foundation
+import NaturalLanguage
 
 /// Proactive help: safe autocorrect as you type, tone at a glance, and a pre-send check.
 enum Proactive {
@@ -75,6 +76,8 @@ enum Proactive {
 
     static func toneEmoji(_ text: String) -> (emoji: String, label: String)? {
         guard TextUtil.wordCount(text) >= 12 else { return nil }
+        // Tone word lists are English.
+        if let l = NLLanguageRecognizer.dominantLanguage(for: text), l != .english { return nil }
         let tones = Metrics.detectTone(text).0
         guard let top = tones.first else { return nil }
         return (top.emoji, top.name)

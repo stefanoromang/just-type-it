@@ -108,7 +108,7 @@ enum RuleData {
         PatternRule(pattern: "\\b(a) (?=hour|honest|honor|honour|heir)(\\w+)", replacement: "an $2",
                     group: .correctness, kind: "Grammar/Articles", title: "Article",
                     explanation: "Use “an” before a silent “h”."),
-        PatternRule(pattern: "\\b(an) (?=[bcdfgjklmnpqrstvwxz]|uni|use|usu|euro|one\\b)(?![A-Z]{2,}\\b)(?![FHLMNRSX][A-Z0-9]*\\b)(\\w+)", replacement: "a $2",
+        PatternRule(pattern: "\\b(an) (?=[bcdfgjklmnpqrstvwxz]|uni|use|usu|euro|one\\b)(?-i:(?![A-Z]{2,}\\b)(?![FHLMNRSX][A-Z0-9]*\\b))(\\w+)", replacement: "a $2",
                     group: .correctness, kind: "Grammar/Articles", title: "Article",
                     explanation: "Use “a” before a consonant sound."),
         PatternRule(pattern: "\\b(yesterday|last (week|month|year|night)|ago)\\b[^.!?]*?\\b(he|she|it|i|we|they|you) (go|eat|see|come|run|buy|write|take|give|make|do)\\b", replacement: "",

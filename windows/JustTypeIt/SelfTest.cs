@@ -30,10 +30,14 @@ static class SelfTest
             var found = RuleEngine.Check("Their going to the store. He dont care.", new CheckOptions());
             Record("Grammar rules", found.Any(i => i.Replacements.Contains("They're going")) && found.Any(i => i.Replacements.Contains("He doesn't")), string.Join("; ", found));
 
-            var spell = WindowsSpellChecker.Shared.Check("I recieved your mesage yesterday.", Dialect.American).ToList();
+            var spell = WindowsSpellChecker.Shared.Check("I recieved your mesage yesterday.", "en-US").ToList();
             Record("Windows spell checker", spell.Count >= 2, string.Join("; ", spell.Select(s => $"{s.start}+{s.length}:{string.Join("/", s.suggestions)}")));
-            var uk = WindowsSpellChecker.Shared.Check("My favorite color.", Dialect.British).ToList();
+            var uk = WindowsSpellChecker.Shared.Check("My favorite color.", "en-GB").ToList();
             Record("Windows spell checker (en-GB)", true, $"{uk.Count} UK spelling flags");
+            // Spanish spelling via Windows' Spanish dictionary (when installed) + Spanish rules always.
+            var es = RuleEngine.Check("Habían muchas personas. ¿Que piensas?", new CheckOptions { Languages = new() { "en", "es" }, Spelling = WindowsSpellChecker.Shared });
+            Record("Spanish checks", es.Any(i => i.Replacements.FirstOrDefault() == "Había muchas") && es.Any(i => i.Replacements.FirstOrDefault() == "¿Qué"),
+                $"Spanish dictionary installed: {WindowsSpellChecker.Shared.Supports("es-ES")}");
 
             // Live: type a mistake in Notepad, read it through UI Automation, measure word positions.
             var file = Path.Combine(Path.GetTempPath(), "jti-selftest.txt");

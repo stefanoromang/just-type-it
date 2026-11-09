@@ -82,6 +82,46 @@ public class EngineTests
         Assert.True(flags.Count == 0, string.Join(" | ", flags));
     }
 
+    // Spanish: same test files as the Mac app.
+    static List<Issue> CheckEs(string s) => RuleEngine.Check(s, new CheckOptions { Languages = new() { "en", "es" } });
+
+    [Fact]
+    public void CatchesEverySpanishMistake()
+    {
+        var missed = File.ReadAllLines("spanish-errors.txt").Where(l => l.Trim().Length > 0)
+            .Where(l => !CheckEs(l).Any(i => i.Group == IssueGroup.Correctness)).ToList();
+        foreach (var m in missed) log.WriteLine("MISSED: " + m);
+        Assert.True(missed.Count == 0, string.Join(" | ", missed));
+    }
+
+    [Fact]
+    public void NoFlagsOnCorrectSpanish()
+    {
+        var flags = File.ReadAllLines("spanish-clean.txt").Where(l => l.Trim().Length > 0)
+            .SelectMany(l => CheckEs(l).Where(i => i.Group == IssueGroup.Correctness).Select(i => $"{l} :: {i}")).ToList();
+        foreach (var f in flags) log.WriteLine("FLAG: " + f);
+        Assert.True(flags.Count == 0, string.Join(" | ", flags));
+    }
+
+    [Theory]
+    [InlineData("Their going to the store tomorrow.", "en")]
+    [InlineData("Habían muchas personas en la reunión.", "es")]
+    [InlineData("Hi Sam,", "en")]
+    [InlineData("Te mando el deck mañana.", "es")]
+    [InlineData("Grazie per il tuo aiuto con il progetto.", "it")]
+    [InlineData("Obrigado pela sua ajuda com o projeto.", "pt-BR")]
+    public void DetectsLanguage(string text, string expected) =>
+        Assert.Equal(expected, Languages.Detect(text, new[] { "en", "es", "it", "pt-BR" }));
+
+    [Fact]
+    public void EnglishAndSpanishInOneText()
+    {
+        var found = CheckEs("Their going to the store.\n¿Que piensas del informe?");
+        Assert.Contains(found, i => i.Replacements.FirstOrDefault() == "They're going");
+        Assert.Contains(found, i => i.Replacements.FirstOrDefault() == "¿Qué");
+        Assert.Equal(27, Languages.All.Count);
+    }
+
     [Fact]
     public void ContactDetailsAreNeverFlagged()
     {

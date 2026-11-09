@@ -493,6 +493,9 @@ final class Everywhere: ObservableObject {
         guard !applyingCorrection, let caret = selectedRange(el)?.location else { return }
         let ns = full as NSString
         let dict = Set(Store.shared.prefs.dictionary.map { $0.lowercased() })
+        // The typo list is English: only autocorrect while writing English.
+        let recent = ns.substring(with: NSRange(location: max(0, min(caret, ns.length) - 300), length: min(caret, ns.length) - max(0, min(caret, ns.length) - 300)))
+        guard Language.detect(recent, among: Store.shared.prefs.languages) == "en" else { return }
         // Look at word boundaries in the last 60 characters before the caret, nearest last.
         let from = max(0, caret - 60)
         var fixes: [Proactive.Correction] = []

@@ -177,6 +177,8 @@ struct Snippet: Codable, Identifiable, Hashable {
 
 struct Prefs: Codable {
     var dialect: Dialect = .american
+    /// Languages you write in (codes from Language.all). Each paragraph is checked in its own language.
+    var languages: [String] = Language.defaults
     var defaultGoals = Goals()
     var dictionary: [String] = []
     var styleRules: [StyleRule] = []
@@ -207,6 +209,8 @@ struct Prefs: Codable {
         let c = try d.container(keyedBy: CodingKeys.self)
         let def = Prefs()
         dialect = (try? c.decode(Dialect.self, forKey: .dialect)) ?? def.dialect
+        languages = ((try? c.decode([String].self, forKey: .languages)) ?? def.languages).filter { code in Language.all.contains { $0.code == code } }
+        if languages.isEmpty { languages = def.languages }
         defaultGoals = (try? c.decode(Goals.self, forKey: .defaultGoals)) ?? def.defaultGoals
         dictionary = (try? c.decode([String].self, forKey: .dictionary)) ?? def.dictionary
         styleRules = (try? c.decode([StyleRule].self, forKey: .styleRules)) ?? def.styleRules
@@ -233,6 +237,10 @@ struct Prefs: Codable {
 /// Options that shape a check run.
 struct CheckOptions {
     var dialect: Dialect = .american
+    /// The user's languages, and the language of the text being checked right now.
+    var languages: [String] = Language.defaults
+    var language = "en"
+    var isEnglish: Bool { language == "en" }
     var goals = Goals()
     var dictionary: Set<String> = []
     var styleRules: [StyleRule] = []
@@ -242,7 +250,7 @@ struct CheckOptions {
     var consistency = true
 
     @MainActor static func from(_ p: Prefs, goals: Goals) -> CheckOptions {
-        CheckOptions(dialect: p.dialect, goals: goals, dictionary: Set(p.dictionary.map { $0.lowercased() }),
+        CheckOptions(dialect: p.dialect, languages: p.languages, goals: goals, dictionary: Set(p.dictionary.map { $0.lowercased() }),
                      styleRules: p.styleRules, passive: p.checkPassive, inclusive: p.checkInclusive,
                      hedging: p.checkHedging, consistency: p.checkConsistency)
     }

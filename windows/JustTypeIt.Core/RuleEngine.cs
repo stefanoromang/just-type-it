@@ -15,15 +15,62 @@ public static class RuleEngine
     public static List<Issue> Check(string text, CheckOptions o)
     {
         if (string.IsNullOrWhiteSpace(text)) return new();
+        // Paragraphs in another language (Spanish, Italian…) get that language's checks; English gets everything.
+        var other = new List<(int start, int end, string lang)>();
+        if (o.Languages.Count > 1 || (o.Languages.Count == 1 && o.Languages[0] != "en"))
+        {
+            int pos = 0;
+            foreach (var line in text.Split('\n'))
+            {
+                var lang = JustTypeIt.Languages.Detect(line, o.Languages);
+                if (lang != "en" && line.Trim().Length > 0) other.Add((pos, pos + line.Length, lang));
+                pos += line.Length + 1;
+            }
+        }
         var issues = new List<Issue>();
-        if (o.Spelling != null) issues.AddRange(Spelling(text, o));
+        if (other.Count > 0)
+        {
+            foreach (var (start, end, lang) in other)
+                foreach (var i in OtherLanguage(text[start..end], lang, o)) { i.Start += start; issues.Add(i); }
+            var english = EnglishIssues(text, o).Where(i => !other.Any(p => i.Start >= p.start && i.Start < p.end || i.Start < p.start && i.End > p.start));
+            return Dedupe(issues.Concat(english).ToList(), text);
+        }
+        return Dedupe(EnglishIssues(text, o), text);
+    }
+
+    static List<Issue> OtherLanguage(string text, string lang, CheckOptions o)
+    {
+        var outList = new List<Issue>();
+        if (o.Spelling != null) outList.AddRange(Spelling(text, o, lang));
+        if (lang == "es")
+            foreach (var rule in RuleData.Shared.Spanish)
+                foreach (Match m in rule.Regex.Matches(text))
+                {
+                    if (m.Length == 0 || o.Dictionary.Contains(m.Value)) continue;
+                    var reps = new List<string>();
+                    if (rule.Replacement.Length > 0)
+                    {
+                        var rep = rule.Replacement.StartsWith("LOWER:") ? m.Value.ToLowerInvariant() : TextUtil.MatchCase(m.Result(rule.Replacement), m.Value);
+                        if (rep == m.Value) continue;
+                        reps.Add(rep);
+                    }
+                    outList.Add(Make(m.Index, m.Length, m.Value, reps, rule.Group, rule.Kind, rule.Title, rule.Explanation));
+                }
+        outList.AddRange(Mechanics(text, lang));
+        return outList;
+    }
+
+    static List<Issue> EnglishIssues(string text, CheckOptions o)
+    {
+        var issues = new List<Issue>();
+        if (o.Spelling != null) issues.AddRange(Spelling(text, o, "en"));
         issues.AddRange(CommonMisspellings(text, o));
         issues.AddRange(ProperNouns(text));
         issues.AddRange(PatternRules(text, o));
         issues.AddRange(Mechanics(text));
         issues.AddRange(Structure(text));
         issues.AddRange(StyleChecks.Run(text, o));
-        return Dedupe(issues, text);
+        return issues;
     }
 
     static Issue Make(int start, int length, string original, IEnumerable<string> reps, IssueGroup g, string kind, string title, string why,
@@ -32,9 +79,9 @@ public static class RuleEngine
 
     // MARK: Spelling (Windows spell checker)
 
-    static IEnumerable<Issue> Spelling(string text, CheckOptions o)
+    static IEnumerable<Issue> Spelling(string text, CheckOptions o, string lang)
     {
-        foreach (var (start, length, suggestions) in o.Spelling!.Check(text, o.Dialect))
+        foreach (var (start, length, suggestions) in o.Spelling!.Check(text, JustTypeIt.Languages.SpellTag(lang, o.Dialect)))
         {
             var word = TextUtil.Sub(text, start, length);
             if (word.Length == 0 || o.Dictionary.Contains(word)) continue;
@@ -46,7 +93,7 @@ public static class RuleEngine
             yield return Make(start, length, word, suggestions.Take(4), IssueGroup.Correctness,
                 apostrophe ? "Punctuation/Apostrophe" : "Spelling/Misspelled", apostrophe ? "Missing apostrophe" : "Spelling",
                 apostrophe ? "Contractions need an apostrophe where letters are left out."
-                           : $"“{word}” isn't in the {o.Dialect} English dictionary. If it's a name or term you use, add it to your dictionary.",
+                           : $"“{word}” isn't in the {(lang == "en" ? o.Dialect + " English" : JustTypeIt.Languages.Named(lang).Name)} dictionary. If it's a name or term you use, add it to your dictionary.",
                 IssueSource.Spelling);
         }
     }
@@ -197,9 +244,10 @@ public static class RuleEngine
 
     // MARK: Mechanics
 
-    public static List<Issue> Mechanics(string text)
+    public static List<Issue> Mechanics(string text, string lang = "en")
     {
         var outList = new List<Issue>();
+        bool en = lang == "en";
         void Add(string p, Func<string, string> rep, string kind, string title, string why, bool ci = true, IssueGroup g = IssueGroup.Correctness)
         {
             foreach (var m in TextUtil.Matches(p, text, ci))
@@ -207,12 +255,14 @@ public static class RuleEngine
         }
         Add(@"\b(?!(?:that|had|is|bye|knock|ha)\s)(\w+) \1\b", s => s.Split(' ')[0], "Grammar/RepeatedWord", "Repeated word", "The same word appears twice in a row.");
         Add(@"(?<=\S)  +(?=\S)", _ => " ", "Punctuation/Spacing", "Extra space", "Use a single space between words.");
-        Add(@"[ \t]+([,.;:!?])(?!\d)", s => s.Trim(), "Punctuation/Spacing", "Space before punctuation", "Punctuation attaches to the word before it.");
+        Add(lang == "fr" ? @"[ \t]+([,.])(?!\d)" : @"[ \t]+([,.;:!?])(?!\d)", s => s.Trim(), "Punctuation/Spacing", "Space before punctuation", "Punctuation attaches to the word before it.");
         Add(@"(?<=[a-z])([,;:])(?=[A-Za-z])", s => s + " ", "Punctuation/Spacing", "Missing space", "Add a space after a comma, semicolon or colon.", false);
         Add(@"(?<=[a-z]{2})([.!?])(?=[A-Z][a-z])", s => s + " ", "Punctuation/Spacing", "Missing space", "Add a space after the end of a sentence.", false);
         Add(",,+", _ => ",", "Punctuation/Comma", "Double comma", "Use a single comma.");
         Add(@"(?<![.])\.\.(?![.])", _ => ".", "Punctuation/Period", "Double period", "Use one period, or three for an ellipsis.");
         Add(@"!{2,}|\?{2,}", s => s[..1], "Punctuation/Exclamation", "Repeated punctuation", "One mark is enough in most writing.", g: IssueGroup.Delivery);
+        if (en)
+        {
         Add(@"\b(however|therefore|moreover|furthermore|nevertheless|consequently) (?=[a-z])", s => s.Trim() + ", ", "Punctuation/Comma", "Missing comma", "Introductory transition words are usually followed by a comma.");
         Add(@"\b(self|ex|all) (aware|employed|confident|esteem|wife|husband|boyfriend|girlfriend|inclusive|important)\b", s => s.Replace(' ', '-'), "Spelling/Misspelled/MissingHyphenInPrefixes", "Missing hyphen", "This prefix is joined with a hyphen.");
         Add(@"\b(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety) (one|two|three|four|five|six|seven|eight|nine)\b", s => s.Replace(' ', '-'), "Spelling/Misspelled/MissingHyphenInNumbers", "Missing hyphen", "Compound numbers from 21 to 99 are hyphenated.");
@@ -235,8 +285,19 @@ public static class RuleEngine
         foreach (var m in TextUtil.Matches(@"(?m)^(Hi|Hello|Hey|Dear|Good morning|Good afternoon|Good evening)( [A-Z][\w.]*(?: [A-Z][\w.]*){0,3})?(?=[ \t]*\r?$)", text, false))
             outList.Add(Make(m.Index, m.Length, m.Value, new[] { m.Value + "," }, IssueGroup.Correctness, "Punctuation/GreetingComma", "Missing comma", "Put a comma after a greeting: “Hi Team,”."));
 
+        }
+
         foreach (var s in TextUtil.Sentences(text))
         {
+            // Spanish questions and exclamations open with ¿ and ¡.
+            if (lang == "es" && s.Text.Length > 0 && (s.Text[^1] == '?' || s.Text[^1] == '!') && s.Text.Split(' ').Length >= 3 && char.IsLetter(s.Text[0]))
+            {
+                char open = s.Text[^1] == '?' ? '¿' : '¡';
+                var fw = TextUtil.Words(s.Text).FirstOrDefault();
+                if (!s.Text.Contains(open) && fw.Text != null)
+                    outList.Add(Make(s.Start + fw.Start, fw.Length, fw.Text, new[] { open + fw.Text }, IssueGroup.Correctness, "Punctuation/SpanishOpening",
+                        open == '¿' ? "Falta “¿”" : "Falta “¡”", $"En español, las preguntas y exclamaciones empiezan con {open}. (Spanish questions and exclamations open with {open}.)"));
+            }
             int li = s.Text.TakeWhile(ch => !char.IsLetter(ch)).Count();
             if (li < s.Text.Length && char.IsLower(s.Text[li]) && !s.Text[..li].Contains('"') && !s.Text.StartsWith("http"))
                 outList.Add(Make(s.Start + li, 1, s.Text[li].ToString(), new[] { char.ToUpperInvariant(s.Text[li]).ToString() }, IssueGroup.Correctness, "Style/Formatting/LowerCaseSentenceStart", "Capitalization", "Start every sentence with a capital letter."));
@@ -246,7 +307,7 @@ public static class RuleEngine
             {
                 var w = TextUtil.Words(s.Text).LastOrDefault();
                 if (w.Text == null) continue;
-                var q = new[] { "who", "what", "when", "where", "why", "how", "do", "does", "did", "can", "could", "would", "will", "is", "are", "should" }
+                var q = s.Text.StartsWith("¿") || en && new[] { "who", "what", "when", "where", "why", "how", "do", "does", "did", "can", "could", "would", "will", "is", "are", "should" }
                     .Contains(s.Text.Split(' ')[0].ToLowerInvariant());
                 outList.Add(Make(s.Start + w.Start, w.Length, w.Text, new[] { w.Text + (q ? "?" : ".") }, IssueGroup.Correctness, "Punctuation/MissingEnd", "Missing end punctuation", q ? "This looks like a question; end it with a question mark." : "End the sentence with a period."));
             }

@@ -14,20 +14,51 @@ enum RuleEngine {
         var issues: [Issue] = []
         // Paragraph-local checks are cached per paragraph: while you type, only the edited
         // paragraph is re-checked. Document-wide checks (repetition, consistency) run on the whole text.
-        let key = "\(o.dialect)|\(o.goals)|\(o.dictionary.sorted())|\(o.styleRules)|\(o.passive)\(o.inclusive)\(o.hedging)"
+        let key = "\(o.dialect)|\(o.languages)|\(o.goals)|\(o.dictionary.sorted())|\(o.styleRules)|\(o.passive)\(o.inclusive)\(o.hedging)"
         if key != cacheKey { paragraphCache.removeAll(); cacheKey = key }
+        var allEnglish = true
         for p in lineParagraphs(text) {
-            for var i in cachedLocal(p.text, o) {
+            // Each paragraph is checked in its own language (English, Spanish, Italian…).
+            var po = o
+            po.language = Language.detect(p.text, among: o.languages)
+            if !po.isEnglish { allEnglish = false }
+            for var i in cachedLocal(p.text, po) {
                 i.range.location += p.range.location
                 issues.append(i)
             }
         }
-        issues += StyleChecks.documentWide(text, o)
+        if allEnglish { issues += StyleChecks.documentWide(text, o) }
         return dedupe(issues, text: text, o: o)
     }
 
     static func local(_ text: String, _ o: CheckOptions) -> [Issue] {
-        systemCheck(text, o) + patternRules(text, o) + mechanics(text) + structure(text) + StyleChecks.run(text, o)
+        guard o.isEnglish else {
+            // Other languages: macOS spelling and grammar for that language, punctuation, and Spanish rules.
+            return systemCheck(text, o) + languageRules(text, o) + mechanics(text, language: o.language)
+        }
+        return systemCheck(text, o) + patternRules(text, o) + mechanics(text) + structure(text) + StyleChecks.run(text, o)
+    }
+
+    /// Rules for languages other than English (currently Spanish).
+    static func languageRules(_ text: String, _ o: CheckOptions) -> [Issue] {
+        guard o.language == "es" else { return [] }
+        var out: [Issue] = []
+        for rule in SpanishRules.all {
+            for m in TextUtil.matches(rule.pattern, in: text, caseInsensitive: rule.caseInsensitive) {
+                let orig = TextUtil.substring(text, m.range)
+                if o.dictionary.contains(orig.lowercased()) { continue }
+                var reps: [String] = []
+                if !rule.replacement.isEmpty, let re = TextUtil.regex(rule.pattern, caseInsensitive: rule.caseInsensitive) {
+                    let rep = rule.replacement.hasPrefix("LOWER:") ? orig.lowercased()
+                        : TextUtil.matchCase(re.replacementString(for: m, in: text, offset: 0, template: rule.replacement), like: orig)
+                    if rep == orig { continue }
+                    reps = [rep]
+                }
+                out.append(Issue(range: m.range, original: orig, replacements: reps, group: rule.group,
+                                 kind: rule.kind, title: rule.title, explanation: rule.explanation))
+            }
+        }
+        return out
     }
 
     nonisolated(unsafe) private static var paragraphCache: [String: [Issue]] = [:]
@@ -62,7 +93,7 @@ enum RuleEngine {
 
     static func systemCheck(_ text: String, _ o: CheckOptions) -> [Issue] {
         let sc = NSSpellChecker.shared
-        let lang = o.dialect.spellLanguage
+        let lang = o.isEnglish ? o.dialect.spellLanguage : Language.named(o.language).spell
         var orth: NSOrthography?
         var wc = 0
         let types = NSTextCheckingResult.CheckingType.spelling.rawValue | NSTextCheckingResult.CheckingType.grammar.rawValue
@@ -92,7 +123,7 @@ enum RuleEngine {
                                  explanation: missingApostrophe
                                     ? "Contractions need an apostrophe where letters are left out."
                                     : capitalization ? "“\(first)” is a proper noun and is always capitalized."
-                                    : "“\(word)” isn't in the \(o.dialect.label) dictionary. If it's a name or term you use, add it to your dictionary.",
+                                    : "“\(word)” isn't in the \(o.isEnglish ? o.dialect.label : Language.named(o.language).name) dictionary. If it's a name or term you use, add it to your dictionary.",
                                  source: .system))
             } else if r.resultType == .grammar {
                 for d in r.grammarDetails ?? [] {
@@ -221,8 +252,9 @@ enum RuleEngine {
 
     // MARK: Mechanics: spacing, punctuation, capitalization, repeated words
 
-    static func mechanics(_ text: String) -> [Issue] {
+    static func mechanics(_ text: String, language: String = "en") -> [Issue] {
         var out: [Issue] = []
+        let en = language == "en"
         func add(_ p: String, _ rep: (String) -> String, _ kind: String, _ title: String, _ why: String, ci: Bool = true, group: IssueGroup = .correctness) {
             for m in TextUtil.matches(p, in: text, caseInsensitive: ci) {
                 let o = TextUtil.substring(text, m.range)
@@ -232,7 +264,8 @@ enum RuleEngine {
         add("\\b(?!(?:that|had|is|bye|knock|ha)\\s)(\\w+) \\1\\b", { String($0.split(separator: " ")[0]) }, "Grammar/RepeatedWord", "Repeated word",
             "The same word appears twice in a row.")
         add("(?<=\\S)  +(?=\\S)", { _ in " " }, "Punctuation/Spacing", "Extra space", "Use a single space between words.")
-        add("\\s+([,.;:!?])(?!\\d)", { $0.trimmingCharacters(in: .whitespaces) }, "Punctuation/Spacing", "Space before punctuation",
+        // French puts a space before ; : ! ?
+        add(language == "fr" ? "\\s+([,.])(?!\\d)" : "\\s+([,.;:!?])(?!\\d)", { $0.trimmingCharacters(in: .whitespaces) }, "Punctuation/Spacing", "Space before punctuation",
             "Punctuation attaches to the word before it.")
         add("(?<=[a-z])([,;:])(?=[A-Za-z])", { $0 + " " }, "Punctuation/Spacing", "Missing space",
             "Add a space after a comma, semicolon or colon.", ci: false)
@@ -242,6 +275,7 @@ enum RuleEngine {
         add("(?<![.])\\.\\.(?![.])", { _ in "." }, "Punctuation/Period", "Double period", "Use one period, or three for an ellipsis.")
         add("!{2,}|\\?{2,}", { String($0.prefix(1)) }, "Punctuation/Exclamation", "Repeated punctuation",
             "One mark is enough in most writing.", group: .delivery)
+        if en {
         add("\\b(however|therefore|moreover|furthermore|nevertheless|consequently) (?=[a-z])", { $0.trimmingCharacters(in: .whitespaces) + ", " },
             "Punctuation/Comma", "Missing comma", "Introductory transition words are usually followed by a comma.")
         add("(?<=[a-z]), (however|therefore|moreover|consequently), (?=[a-z])", { "; " + $0.dropFirst(2) }, "Punctuation/CommaSplice", "Comma splice",
@@ -287,7 +321,8 @@ enum RuleEngine {
                              kind: "Punctuation/GreetingComma", title: "Missing comma",
                              explanation: "Put a comma after a greeting: “Hi Team,”."))
         }
-        // Sentence capitalization and closing punctuation.
+        }
+        // Sentence capitalization and closing punctuation (all languages).
         for s in TextUtil.sentences(text) {
             guard let first = s.text.first(where: { $0.isLetter }) else { continue }
             let prefix = s.text.prefix(while: { !$0.isLetter })
@@ -302,11 +337,22 @@ enum RuleEngine {
                NSMaxRange(s.range) >= (text as NSString).length || TextUtil.substring(text, NSRange(location: NSMaxRange(s.range), length: 1)).first?.isNewline == true {
                 let w = TextUtil.words(s.text).last?.text ?? String(last)
                 let r = NSRange(location: NSMaxRange(s.range) - (w as NSString).length, length: (w as NSString).length)
-                let isQ = ["who", "what", "when", "where", "why", "how", "do", "does", "did", "can", "could", "would", "will", "is", "are", "should"]
+                let isQ = s.text.hasPrefix("¿") || en && ["who", "what", "when", "where", "why", "how", "do", "does", "did", "can", "could", "would", "will", "is", "are", "should"]
                     .contains(s.text.split(separator: " ").first.map { $0.lowercased() } ?? "")
                 out.append(Issue(range: r, original: w, replacements: [w + (isQ ? "?" : ".")], group: .correctness,
                                  kind: "Punctuation/MissingEnd", title: "Missing end punctuation",
                                  explanation: isQ ? "This looks like a question; end it with a question mark." : "End the sentence with a period."))
+            }
+            // Spanish questions and exclamations open with ¿ and ¡.
+            if language == "es", let last = s.text.last, last == "?" || last == "!", s.text.split(separator: " ").count >= 3 {
+                let open: Character = last == "?" ? "¿" : "¡"
+                let lead = s.text.prefix(while: { !$0.isLetter && !$0.isNumber })
+                if !s.text.contains(open), lead.isEmpty, let w = TextUtil.words(s.text).first {
+                    let r = NSRange(location: s.range.location + w.range.location, length: w.range.length)
+                    out.append(Issue(range: r, original: w.text, replacements: ["\(open)\(w.text)"], group: .correctness,
+                                     kind: "Punctuation/SpanishOpening", title: last == "?" ? "Falta “¿”" : "Falta “¡”",
+                                     explanation: "En español, las preguntas y exclamaciones empiezan con \(open). (Spanish questions and exclamations open with \(open).)"))
+                }
             }
         }
         return out

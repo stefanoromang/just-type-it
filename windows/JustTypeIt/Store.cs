@@ -8,6 +8,7 @@ namespace JustTypeIt;
 public sealed class Prefs
 {
     public Dialect Dialect { get; set; } = Dialect.American;
+    public List<string> Languages { get; set; } = new(JustTypeIt.Languages.Defaults);
     public Goals DefaultGoals { get; set; } = new();
     public List<string> Dictionary { get; set; } = new();
     public List<StyleRule> StyleRules { get; set; } = new();
@@ -68,6 +69,7 @@ public sealed class Store
     public CheckOptions Options(Goals? goals = null) => new()
     {
         Dialect = Prefs.Dialect,
+        Languages = Prefs.Languages.Count > 0 ? Prefs.Languages : new(JustTypeIt.Languages.Defaults),
         Goals = goals ?? Prefs.DefaultGoals,
         Dictionary = new HashSet<string>(Prefs.Dictionary, StringComparer.OrdinalIgnoreCase),
         StyleRules = Prefs.StyleRules,
@@ -83,5 +85,44 @@ public sealed class Store
         if (word.Length == 0 || Prefs.Dictionary.Contains(word, StringComparer.OrdinalIgnoreCase)) return;
         Prefs.Dictionary.Add(word);
         Save();
+    }
+}
+
+/// The "Languages" menu shared by the tray and the main window: tick any of the 27 languages
+/// (at least one stays on). English and Spanish are on by default.
+static class LanguageMenu
+{
+    public static void Fill(ToolStripMenuItem root, Action? changed = null)
+    {
+        void Build()
+        {
+            var p = Store.Shared.Prefs;
+            root.Text = "Languages: " + Languages.Summary(p.Languages);
+            root.DropDownItems.Clear();
+            root.DropDownItems.Add(new ToolStripMenuItem("Checks each paragraph in its own language") { Enabled = false });
+            root.DropDownItems.Add(new ToolStripSeparator());
+            foreach (var l in Languages.All)
+            {
+                var item = new ToolStripMenuItem(l.MenuLabel) { Checked = p.Languages.Contains(l.Code) };
+                item.Click += (_, _) =>
+                {
+                    if (p.Languages.Contains(l.Code)) { if (p.Languages.Count > 1) p.Languages.Remove(l.Code); }
+                    else p.Languages.Add(l.Code);
+                    Store.Shared.Save(); Build(); changed?.Invoke();
+                };
+                root.DropDownItems.Add(item);
+            }
+            root.DropDownItems.Add(new ToolStripSeparator());
+            var variety = new ToolStripMenuItem("English variety");
+            foreach (var d in Enum.GetValues<Dialect>())
+            {
+                var item = new ToolStripMenuItem(d + " English") { Checked = p.Dialect == d };
+                item.Click += (_, _) => { p.Dialect = d; Store.Shared.Save(); Build(); changed?.Invoke(); };
+                variety.DropDownItems.Add(item);
+            }
+            root.DropDownItems.Add(variety);
+            root.DropDownItems.Add("Reset to English + Spanish", null, (_, _) => { p.Languages = new(Languages.Defaults); Store.Shared.Save(); Build(); changed?.Invoke(); });
+        }
+        Build();
     }
 }

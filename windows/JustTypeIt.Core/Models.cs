@@ -84,6 +84,8 @@ public sealed class StyleRule
 public sealed class CheckOptions
 {
     public Dialect Dialect { get; set; } = Dialect.American;
+    /// The user's writing languages; each paragraph is checked in its own language.
+    public List<string> Languages { get; set; } = new(JustTypeIt.Languages.Defaults);
     public Goals Goals { get; set; } = new();
     public HashSet<string> Dictionary { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public List<StyleRule> StyleRules { get; set; } = new();
@@ -98,5 +100,5 @@ public sealed class CheckOptions
 public interface ISpellChecker
 {
     /// Returns misspelled words: (start, length, suggestions).
-    IEnumerable<(int start, int length, IReadOnlyList<string> suggestions)> Check(string text, Dialect dialect);
+    IEnumerable<(int start, int length, IReadOnlyList<string> suggestions)> Check(string text, string languageTag);
 }

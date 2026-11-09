@@ -275,7 +275,7 @@
       "explanation" : "Use “a” before a consonant sound.",
       "group" : "correctness",
       "kind" : "Grammar\/Articles",
-      "pattern" : "\\b(an) (?=[bcdfgjklmnpqrstvwxz]|uni|use|usu|euro|one\\b)(?![A-Z]{2,}\\b)(?![FHLMNRSX][A-Z0-9]*\\b)(\\w+)",
+      "pattern" : "\\b(an) (?=[bcdfgjklmnpqrstvwxz]|uni|use|usu|euro|one\\b)(?-i:(?![A-Z]{2,}\\b)(?![FHLMNRSX][A-Z0-9]*\\b))(\\w+)",
       "replacement" : "a $2",
       "title" : "Article"
     },
@@ -1891,6 +1891,143 @@
       "lit"
     ]
   ],
+  "languages" : [
+    {
+      "code" : "en",
+      "name" : "English",
+      "native" : "English"
+    },
+    {
+      "code" : "es",
+      "name" : "Spanish",
+      "native" : "Español"
+    },
+    {
+      "code" : "it",
+      "name" : "Italian",
+      "native" : "Italiano"
+    },
+    {
+      "code" : "pt-BR",
+      "name" : "Portuguese (Brazil)",
+      "native" : "Português (Brasil)"
+    },
+    {
+      "code" : "pt-PT",
+      "name" : "Portuguese (Portugal)",
+      "native" : "Português (Portugal)"
+    },
+    {
+      "code" : "fr",
+      "name" : "French",
+      "native" : "Français"
+    },
+    {
+      "code" : "de",
+      "name" : "German",
+      "native" : "Deutsch"
+    },
+    {
+      "code" : "nl",
+      "name" : "Dutch",
+      "native" : "Nederlands"
+    },
+    {
+      "code" : "sv",
+      "name" : "Swedish",
+      "native" : "Svenska"
+    },
+    {
+      "code" : "da",
+      "name" : "Danish",
+      "native" : "Dansk"
+    },
+    {
+      "code" : "nb",
+      "name" : "Norwegian",
+      "native" : "Norsk"
+    },
+    {
+      "code" : "fi",
+      "name" : "Finnish",
+      "native" : "Suomi"
+    },
+    {
+      "code" : "pl",
+      "name" : "Polish",
+      "native" : "Polski"
+    },
+    {
+      "code" : "cs",
+      "name" : "Czech",
+      "native" : "Čeština"
+    },
+    {
+      "code" : "ro",
+      "name" : "Romanian",
+      "native" : "Română"
+    },
+    {
+      "code" : "hu",
+      "name" : "Hungarian",
+      "native" : "Magyar"
+    },
+    {
+      "code" : "el",
+      "name" : "Greek",
+      "native" : "Ελληνικά"
+    },
+    {
+      "code" : "tr",
+      "name" : "Turkish",
+      "native" : "Türkçe"
+    },
+    {
+      "code" : "ru",
+      "name" : "Russian",
+      "native" : "Русский"
+    },
+    {
+      "code" : "uk",
+      "name" : "Ukrainian",
+      "native" : "Українська"
+    },
+    {
+      "code" : "bg",
+      "name" : "Bulgarian",
+      "native" : "Български"
+    },
+    {
+      "code" : "id",
+      "name" : "Indonesian",
+      "native" : "Bahasa Indonesia"
+    },
+    {
+      "code" : "vi",
+      "name" : "Vietnamese",
+      "native" : "Tiếng Việt"
+    },
+    {
+      "code" : "hi",
+      "name" : "Hindi",
+      "native" : "हिन्दी"
+    },
+    {
+      "code" : "ar",
+      "name" : "Arabic",
+      "native" : "العربية"
+    },
+    {
+      "code" : "he",
+      "name" : "Hebrew",
+      "native" : "עברית"
+    },
+    {
+      "code" : "ko",
+      "name" : "Korean",
+      "native" : "한국어"
+    }
+  ],
   "redundant" : [
     [
       "absolutely essential",
@@ -2056,6 +2193,764 @@
       "both of them together",
       "both"
     ]
+  ],
+  "spanish" : [
+    {
+      "caseInsensitive" : false,
+      "explanation" : "En preguntas, “adónde” lleva tilde. (Question words take an accent.)",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "¿(\\s*)([Aa])donde\\b",
+      "replacement" : "¿$1$2dónde",
+      "title" : "Tilde"
+    },
+    {
+      "caseInsensitive" : false,
+      "explanation" : "En preguntas, “cómo” lleva tilde. (Question words take an accent.)",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "¿(\\s*)([Cc])omo\\b",
+      "replacement" : "¿$1$2ómo",
+      "title" : "Tilde"
+    },
+    {
+      "caseInsensitive" : false,
+      "explanation" : "En preguntas, “cuál” lleva tilde. (Question words take an accent.)",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "¿(\\s*)([Cc])ual\\b",
+      "replacement" : "¿$1$2uál",
+      "title" : "Tilde"
+    },
+    {
+      "caseInsensitive" : false,
+      "explanation" : "En preguntas, “cuáles” lleva tilde. (Question words take an accent.)",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "¿(\\s*)([Cc])uales\\b",
+      "replacement" : "¿$1$2uáles",
+      "title" : "Tilde"
+    },
+    {
+      "caseInsensitive" : false,
+      "explanation" : "En preguntas, “cuándo” lleva tilde. (Question words take an accent.)",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "¿(\\s*)([Cc])uando\\b",
+      "replacement" : "¿$1$2uándo",
+      "title" : "Tilde"
+    },
+    {
+      "caseInsensitive" : false,
+      "explanation" : "En preguntas, “cuánta” lleva tilde. (Question words take an accent.)",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "¿(\\s*)([Cc])uanta\\b",
+      "replacement" : "¿$1$2uánta",
+      "title" : "Tilde"
+    },
+    {
+      "caseInsensitive" : false,
+      "explanation" : "En preguntas, “cuántas” lleva tilde. (Question words take an accent.)",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "¿(\\s*)([Cc])uantas\\b",
+      "replacement" : "¿$1$2uántas",
+      "title" : "Tilde"
+    },
+    {
+      "caseInsensitive" : false,
+      "explanation" : "En preguntas, “cuánto” lleva tilde. (Question words take an accent.)",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "¿(\\s*)([Cc])uanto\\b",
+      "replacement" : "¿$1$2uánto",
+      "title" : "Tilde"
+    },
+    {
+      "caseInsensitive" : false,
+      "explanation" : "En preguntas, “cuántos” lleva tilde. (Question words take an accent.)",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "¿(\\s*)([Cc])uantos\\b",
+      "replacement" : "¿$1$2uántos",
+      "title" : "Tilde"
+    },
+    {
+      "caseInsensitive" : false,
+      "explanation" : "En preguntas, “dónde” lleva tilde. (Question words take an accent.)",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "¿(\\s*)([Dd])onde\\b",
+      "replacement" : "¿$1$2ónde",
+      "title" : "Tilde"
+    },
+    {
+      "caseInsensitive" : false,
+      "explanation" : "En preguntas, “qué” lleva tilde. (Question words take an accent.)",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "¿(\\s*)([Qq])ue\\b",
+      "replacement" : "¿$1$2ué",
+      "title" : "Tilde"
+    },
+    {
+      "caseInsensitive" : false,
+      "explanation" : "En preguntas, “quién” lleva tilde. (Question words take an accent.)",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "¿(\\s*)([Qq])uien\\b",
+      "replacement" : "¿$1$2uién",
+      "title" : "Tilde"
+    },
+    {
+      "caseInsensitive" : false,
+      "explanation" : "En preguntas, “quiénes” lleva tilde. (Question words take an accent.)",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "¿(\\s*)([Qq])uienes\\b",
+      "replacement" : "¿$1$2uiénes",
+      "title" : "Tilde"
+    },
+    {
+      "caseInsensitive" : false,
+      "explanation" : "En preguntas se escribe “por qué”, separado y con tilde.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "¿(\\s*)([Pp])or que\\b",
+      "replacement" : "¿$1$2or qué",
+      "title" : "Tilde"
+    },
+    {
+      "caseInsensitive" : false,
+      "explanation" : "En preguntas se escribe “por qué”, separado y con tilde.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "¿(\\s*)([Pp])orque\\b",
+      "replacement" : "¿$1$2or qué",
+      "title" : "Tilde"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "“Tú” (pronombre) lleva tilde; “tu” sin tilde es posesivo (tu casa).",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "\\b(tu) (eres|tienes|estás|estas|puedes|sabes|quieres|vas|haces|dices|necesitas|crees|piensas|debes|tenías|eras|fuiste)\\b",
+      "replacement" : "tú $2",
+      "title" : "Tú \/ tu"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "“Él” (pronombre) lleva tilde; “el” sin tilde es artículo (el libro).",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "\\b(el) (es|está|tiene|fue|era|dijo|quiere|puede|va|sabe|vino|hizo|tenía|estaba|necesita|cree|piensa|trabaja|vive)\\b",
+      "replacement" : "él $2",
+      "title" : "Él \/ el"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Después de una preposición, el pronombre “mí” lleva tilde (para mí, a mí me gusta).",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "\\b(para|a|de|por|sin|contra|hacia|según|entre) mi(?=\\s*[.,;:!?)]|\\s*$|\\s+(?:mismo|misma|me|también|tampoco|es|no)\\b)",
+      "replacement" : "$1 mí",
+      "title" : "Mí \/ mi"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "“Sí” afirmativo lleva tilde (creo que sí).",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "\\b(que|claro que|pues|eso|creo que|dijo que|dije que) si(?=\\s*[.,!?]|\\s*$)",
+      "replacement" : "$1 sí",
+      "title" : "Sí \/ si"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "El verbo “está” lleva tilde; “esta” sin tilde es demostrativo (esta casa).",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "\\b(esta) (bien|mal|listo|claro|aquí|allí|ahí|seguro|segura|disponible|haciendo|trabajando|esperando|incluido|incluida|terminado|terminada)\\b",
+      "replacement" : "está $2",
+      "title" : "Está \/ esta"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "El verbo “estás” lleva tilde; “estas” sin tilde es demostrativo (estas casas).",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "\\b(estas) (bien|mal|seguro|segura|seguros|seguras|listo|lista|haciendo|trabajando|ocupado|ocupada)\\b",
+      "replacement" : "estás $2",
+      "title" : "Estás \/ estas"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "“Más” (cantidad) lleva tilde; “mas” sin tilde significa “pero”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "\\b(cada vez|lo|los|las|mucho|mucha|muchos|muchas|aún|todavía|un poco|algo|nada|mucho|cada día) mas\\b",
+      "replacement" : "$1 más",
+      "title" : "Más \/ mas"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "“Más” (cantidad) lleva tilde; “mas” sin tilde significa “pero”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Accent",
+      "pattern" : "\\b(mas) (o menos|de lo|que nada|tarde|temprano|bien|grande|pequeño|importante|fácil|difícil|rápido|información|detalles|tiempo)\\b",
+      "replacement" : "más $2",
+      "title" : "Más \/ mas"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Con el sentido de “existir”, “haber” es impersonal y va en singular: “había muchas personas”, “hubo problemas”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Haber",
+      "pattern" : "(?<!\\b(?:se|les|los|las|me|te|nos|que se) )\\b(habían) (muchas|muchos|varias|varios|unas|unos|pocas|pocos|algunas|algunos|demasiadas|demasiados|bastantes|dos|tres|cuatro|cinco|diez|cien|problemas|personas|cambios|errores|quejas|dudas|\\d+)\\b",
+      "replacement" : "había $2",
+      "title" : "Haber impersonal"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Con el sentido de “existir”, “haber” es impersonal y va en singular: “había muchas personas”, “hubo problemas”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Haber",
+      "pattern" : "(?<!\\b(?:se|les|los|las|me|te|nos|que se) )\\b(hubieron) (muchas|muchos|varias|varios|unas|unos|pocas|pocos|algunas|algunos|demasiadas|demasiados|bastantes|dos|tres|cuatro|cinco|diez|cien|problemas|personas|cambios|errores|quejas|dudas|\\d+)\\b",
+      "replacement" : "hubo $2",
+      "title" : "Haber impersonal"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Con el sentido de “existir”, “haber” es impersonal y va en singular: “había muchas personas”, “hubo problemas”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Haber",
+      "pattern" : "(?<!\\b(?:se|les|los|las|me|te|nos|que se) )\\b(habrán) (muchas|muchos|varias|varios|unas|unos|pocas|pocos|algunas|algunos|demasiadas|demasiados|bastantes|dos|tres|cuatro|cinco|diez|cien|problemas|personas|cambios|errores|quejas|dudas|\\d+)\\b",
+      "replacement" : "habrá $2",
+      "title" : "Haber impersonal"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Con el sentido de “existir”, “haber” es impersonal y va en singular: “había muchas personas”, “hubo problemas”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Haber",
+      "pattern" : "(?<!\\b(?:se|les|los|las|me|te|nos|que se) )\\b(habrían) (muchas|muchos|varias|varios|unas|unos|pocas|pocos|algunas|algunos|demasiadas|demasiados|bastantes|dos|tres|cuatro|cinco|diez|cien|problemas|personas|cambios|errores|quejas|dudas|\\d+)\\b",
+      "replacement" : "habría $2",
+      "title" : "Haber impersonal"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Con el sentido de “existir”, “haber” es impersonal y va en singular: “había muchas personas”, “hubo problemas”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Haber",
+      "pattern" : "(?<!\\b(?:se|les|los|las|me|te|nos|que se) )\\b(hayan) (muchas|muchos|varias|varios|unas|unos|pocas|pocos|algunas|algunos|demasiadas|demasiados|bastantes|dos|tres|cuatro|cinco|diez|cien|problemas|personas|cambios|errores|quejas|dudas|\\d+)\\b",
+      "replacement" : "haya $2",
+      "title" : "Haber impersonal"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Falta la preposición “a”: “va a haber”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Haber",
+      "pattern" : "\\b(va|van|iba|iban) haber\\b",
+      "replacement" : "$1 a haber",
+      "title" : "Va a haber"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "“A ver” (de “ver”) se escribe separado: “vamos a ver”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Haber",
+      "pattern" : "\\b(vamos|voy|vas) haber\\b",
+      "replacement" : "$1 a ver",
+      "title" : "A ver \/ haber"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "“A ver si…” se escribe separado (de “ver”).",
+      "group" : "correctness",
+      "kind" : "Spanish\/Haber",
+      "pattern" : "(?<!\\b(?:puede|pueda|podría|debe|debería|tiene que|suele|parece|va a|tiene) )\\bhaber si\\b",
+      "replacement" : "a ver si",
+      "title" : "A ver \/ haber"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Con el participio va el verbo “ha” (con h): “ha sido”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Haber",
+      "pattern" : "\\b(a) (sido|tenido|habido|podido|llegado|terminado|recibido|trabajado|hablado|comprado|olvidado|pasado por alto)\\b",
+      "replacement" : "ha $2",
+      "title" : "Ha \/ a"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "“Hecho” (de “hacer”) se escribe con h: “he hecho”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Haber",
+      "pattern" : "\\b(he|has|ha|hemos|habéis|han|había|habían|haber) echo\\b",
+      "replacement" : "$1 hecho",
+      "title" : "Hecho \/ echo"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "La forma correcta es “haya”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Haber",
+      "pattern" : "\\b(haiga|haigan)\\b",
+      "replacement" : "haya",
+      "title" : "Haya"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "“Hay que” (verbo haber); “ahí” es un lugar.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Hay",
+      "pattern" : "\\bahí que (\\w+(?:ar|er|ir))\\b",
+      "replacement" : "hay que $1",
+      "title" : "Hay \/ ahí"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "“Ahí” indica lugar (por ahí, de ahí); “hay” es del verbo haber.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Hay",
+      "pattern" : "\\b(por|de) hay\\b(?!\\s+(?:que|un|una|mucho|mucha|muchos|muchas|algo|nada|más|menos|varios|varias)\\b)",
+      "replacement" : "$1 ahí",
+      "title" : "Ahí \/ hay"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "“Ahí” indica lugar (ahí está); “hay” es del verbo haber.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Hay",
+      "pattern" : "\\bhay (está|están|estaba|tienes|va|viene|lo|la|los|las)\\b",
+      "replacement" : "ahí $1",
+      "title" : "Ahí \/ hay"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Este sustantivo es masculino: “el problema”, “el sistema”, “el día”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Gender",
+      "pattern" : "\\b(la) (problema|sistema|tema|programa|día|idioma|mapa|clima|dilema|esquema|planeta|programa|correo|mensaje)\\b",
+      "replacement" : "el $2",
+      "title" : "Género"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Este sustantivo es masculino: “un problema”, “un día”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Gender",
+      "pattern" : "\\b(una) (problema|sistema|tema|programa|día|idioma|mapa|dilema|esquema|planeta|correo|mensaje)\\b",
+      "replacement" : "un $2",
+      "title" : "Género"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Este sustantivo es femenino: “la mano”, “la foto”, “la reunión”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Gender",
+      "pattern" : "\\b(el) (mano|foto|moto|gente|calle|noche|tarde|clase|leche|carne|llave|mente|sede|reunión|razón|opción|información|empresa)\\b",
+      "replacement" : "la $2",
+      "title" : "Género"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Este sustantivo es femenino: “una reunión”, “una foto”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Gender",
+      "pattern" : "\\b(un) (mano|foto|moto|calle|noche|clase|llave|reunión|razón|opción|empresa)\\b",
+      "replacement" : "una $2",
+      "title" : "Género"
+    },
+    {
+      "caseInsensitive" : false,
+      "explanation" : "“De” + “el” se contrae en “del” (salvo nombres propios como “El Salvador”).",
+      "group" : "correctness",
+      "kind" : "Spanish\/Contraction",
+      "pattern" : "\\bde el\\b",
+      "replacement" : "del",
+      "title" : "Del"
+    },
+    {
+      "caseInsensitive" : false,
+      "explanation" : "“A” + “el” se contrae en “al”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Contraction",
+      "pattern" : "(?<![\\w¿¡])a el\\b",
+      "replacement" : "al",
+      "title" : "Al"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Con este verbo no se usa “de que”: “pienso que”, “creo que”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Dequeismo",
+      "pattern" : "\\b(pienso|piensa|piensas|pensamos|piensan|pensaba|creo|crees|cree|creemos|creen|creía|opino|opina|opinamos|dijo|dije|dijeron|dicen|considero|considera|supongo|supone|me parece|le parece|nos parece|parece|espero|esperamos|imagino|resulta|es posible|es necesario|es probable) de que\\b",
+      "replacement" : "$1 que",
+      "title" : "Dequeísmo"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "“Darse cuenta” lleva “de”: “me di cuenta de que”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Queismo",
+      "pattern" : "\\b(me di|te diste|se dio|nos dimos|se dieron|darse|me doy|te das|se da|nos damos|se dan) cuenta que\\b",
+      "replacement" : "$1 cuenta de que",
+      "title" : "Queísmo"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "“Estar seguro \/ convencido” lleva “de”: “estoy seguro de que”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Queismo",
+      "pattern" : "\\b(estoy|está|estás|estamos|están|estaba|estábamos|estaban) (seguro|segura|seguros|seguras|convencido|convencida|convencidos|convencidas) que\\b",
+      "replacement" : "$1 $2 de que",
+      "title" : "Queísmo"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "La locución es “a pesar de que”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Queismo",
+      "pattern" : "\\ba pesar que\\b",
+      "replacement" : "a pesar de que",
+      "title" : "A pesar de que"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "El pretérito de “tú” no lleva -s final: “dijiste”, “llegaste”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Verb",
+      "pattern" : "\\b(dij|fu|hic|vin|tuv|estuv|pud|quis|com|sal|escrib|recib|lleg|habl|mand|envi|dej|pens|trabaj|termin|pas|olvid|llam|compr)(iste|aste)s\\b",
+      "replacement" : "$1$2",
+      "title" : "Forma verbal"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se recomienda “con base en”, “basándose en” o “a partir de”.",
+      "group" : "clarity",
+      "kind" : "Spanish\/Style",
+      "pattern" : "\\b(en base a)\\b",
+      "replacement" : "con base en",
+      "title" : "En base a"
+    },
+    {
+      "caseInsensitive" : false,
+      "explanation" : "El saludo va seguido de coma: “Hola Ana,”.",
+      "group" : "correctness",
+      "kind" : "Punctuation\/GreetingComma",
+      "pattern" : "\\b(Hola|Buenos días|Buenas tardes|Buenas noches)( [A-ZÁÉÍÓÚÑ][\\wáéíóúñ.]*(?: [A-ZÁÉÍÓÚÑ][\\wáéíóúñ.]*){0,3})(?=[ \\t]*$)",
+      "replacement" : "$1$2,",
+      "title" : "Falta coma"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “a la vez”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\ba la ves\\b",
+      "replacement" : "a la vez",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “tal vez”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\btal ves\\b",
+      "replacement" : "tal vez",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “otra vez”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\botra ves\\b",
+      "replacement" : "otra vez",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “una vez”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\buna ves\\b",
+      "replacement" : "una vez",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “cada vez”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\bcada ves\\b",
+      "replacement" : "cada vez",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “tal vez”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\btalvez\\b",
+      "replacement" : "tal vez",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “o sea”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\bosea\\b",
+      "replacement" : "o sea",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “a veces”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\baveces\\b",
+      "replacement" : "a veces",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “en serio”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\benserio\\b",
+      "replacement" : "en serio",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “por favor”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\bporfavor\\b",
+      "replacement" : "por favor",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “a pesar”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\bapesar\\b",
+      "replacement" : "a pesar",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “así”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\bhaci\\b",
+      "replacement" : "así",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “hacer”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\baser\\b",
+      "replacement" : "hacer",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “haciendo”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\basiendo\\b",
+      "replacement" : "haciendo",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “no sé”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\bnose\\b",
+      "replacement" : "no sé",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “al menos”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\balmenos\\b",
+      "replacement" : "al menos",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “en cambio”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\bencambio\\b",
+      "replacement" : "en cambio",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “de acuerdo”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\bdeacuerdo\\b",
+      "replacement" : "de acuerdo",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “sin embargo”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\bsinembargo\\b",
+      "replacement" : "sin embargo",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “echar”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\bhechar\\b",
+      "replacement" : "echar",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “hubiera”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\bubiera\\b",
+      "replacement" : "hubiera",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “hubo”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\bubo\\b",
+      "replacement" : "hubo",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “necesito”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\bnesecito\\b",
+      "replacement" : "necesito",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “necesito”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\bnesesito\\b",
+      "replacement" : "necesito",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “necesito”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\bnececito\\b",
+      "replacement" : "necesito",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “excelente”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\bexelente\\b",
+      "replacement" : "excelente",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “excelente”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\becelente\\b",
+      "replacement" : "excelente",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “interesante”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\binterezante\\b",
+      "replacement" : "interesante",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “dijeron”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\bdijieron\\b",
+      "replacement" : "dijeron",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “trajeron”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\btrajieron\\b",
+      "replacement" : "trajeron",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "Se escribe “conduje”.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Spelling",
+      "pattern" : "\\bconducí\\b",
+      "replacement" : "conduje",
+      "title" : "Ortografía"
+    },
+    {
+      "caseInsensitive" : false,
+      "explanation" : "En español, los días de la semana se escriben con minúscula.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Capitalization",
+      "pattern" : "(?<=\\b(?:el|los|este|próximo|cada|del|al|desde el|hasta el) )(Lunes|Martes|Miércoles|Jueves|Viernes|Sábado|Domingo)\\b",
+      "replacement" : "LOWER:$1",
+      "title" : "Minúscula"
+    },
+    {
+      "caseInsensitive" : false,
+      "explanation" : "En español, los meses se escriben con minúscula.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Capitalization",
+      "pattern" : "(?<=\\b\\d{1,2} de )(Enero|Febrero|Marzo|Abril|Mayo|Junio|Julio|Agosto|Septiembre|Setiembre|Octubre|Noviembre|Diciembre)\\b",
+      "replacement" : "LOWER:$1",
+      "title" : "Minúscula"
+    },
+    {
+      "caseInsensitive" : false,
+      "explanation" : "En español, los idiomas se escriben con minúscula.",
+      "group" : "correctness",
+      "kind" : "Spanish\/Capitalization",
+      "pattern" : "(?<=\\b(?:en|el|del|hablo|habla|hablas|hablamos|hablan|idioma|traducir al|traducido al) )(Español|Inglés|Francés|Italiano|Alemán|Portugués|Chino|Japonés)\\b",
+      "replacement" : "LOWER:$1",
+      "title" : "Minúscula"
+    }
   ],
   "synonyms" : {
     "allow" : [

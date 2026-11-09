@@ -267,6 +267,8 @@ public sealed class Everywhere : IDisposable
             int caret = await Task.Run(() => Caret(el, text));
             if (caret < 0) return;
             var dict = new HashSet<string>(Store.Shared.Prefs.Dictionary.Select(w => w.ToLowerInvariant()));
+            // The typo list is English: only autocorrect while writing English.
+            if (Languages.Detect(text[Math.Max(0, Math.Min(caret, text.Length) - 300)..Math.Min(caret, text.Length)], Store.Shared.Prefs.Languages) != "en") return;
             var fixes = new List<Proactive.Correction>();
             for (int i = caret; i > Math.Max(0, caret - 60); i--)
             {

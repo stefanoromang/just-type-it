@@ -19,6 +19,8 @@ public sealed record PatternRule(Regex Regex, string Replacement, IssueGroup Gro
 public sealed class RuleData
 {
     public List<PatternRule> Grammar { get; } = new();
+    public List<PatternRule> Spanish { get; } = new();
+    public List<Language> Languages { get; } = new();
     public List<(string, string)> Wordy { get; } = new();
     public List<(string, string)> Redundant { get; } = new();
     public List<(string, string)> Informal { get; } = new();
@@ -45,6 +47,26 @@ public sealed class RuleData
     public static RuleData FromJson(JsonElement root)
     {
         var d = new RuleData();
+        void LoadRules(JsonElement arr, List<PatternRule> into)
+        {
+            foreach (var r in arr.EnumerateArray())
+            {
+                var pattern = IcuToNet(r.GetProperty("pattern").GetString()!);
+                var options = RegexOptions.CultureInvariant | (r.GetProperty("caseInsensitive").GetBoolean() ? RegexOptions.IgnoreCase : RegexOptions.None);
+                try
+                {
+                    into.Add(new PatternRule(new Regex(pattern, options, TimeSpan.FromMilliseconds(250)), r.GetProperty("replacement").GetString()!,
+                        IssueGroups.Parse(r.GetProperty("group").GetString()!), r.GetProperty("kind").GetString()!, r.GetProperty("title").GetString()!,
+                        r.GetProperty("explanation").GetString()!));
+                }
+                catch (ArgumentException) { d.SkippedRules++; }
+            }
+        }
+        if (root.TryGetProperty("spanish", out var es)) LoadRules(es, d.Spanish);
+        if (root.TryGetProperty("languages", out var langs))
+            foreach (var l in langs.EnumerateArray())
+                d.Languages.Add(new Language(l.GetProperty("code").GetString()!, l.GetProperty("name").GetString()!, l.GetProperty("native").GetString()!));
+        if (d.Languages.Count == 0) d.Languages.Add(new Language("en", "English", "English"));
         foreach (var r in root.GetProperty("grammar").EnumerateArray())
         {
             var pattern = IcuToNet(r.GetProperty("pattern").GetString()!);

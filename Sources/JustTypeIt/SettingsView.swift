@@ -19,7 +19,8 @@ struct SettingsView: View {
 
     private var general: some View {
         Form {
-            Picker("English dialect", selection: $store.prefs.dialect) {
+            LabeledContent("Writing languages") { LanguageMenu(store: store).fixedSize() }
+            Picker("English variety", selection: $store.prefs.dialect) {
                 ForEach(Dialect.allCases) { Text($0.label).tag($0) }
             }
             Section("Checks") {

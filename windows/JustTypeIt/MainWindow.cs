@@ -10,7 +10,6 @@ public sealed class MainWindow : Form
     readonly FlowLayoutPanel cards = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(10) };
     readonly Label score = new() { Dock = DockStyle.Top, Height = 64, Font = new Font("Segoe UI", 12f, FontStyle.Bold), Padding = new Padding(12, 10, 0, 0) };
     readonly Label stats = new() { Dock = DockStyle.Bottom, Height = 26, ForeColor = Color.Gray, Padding = new Padding(16, 4, 0, 0) };
-    readonly ComboBox dialect = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 150 };
     readonly ComboBox formality = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 110 };
     readonly ComboBox domain = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 110 };
     readonly System.Windows.Forms.Timer debounce = new() { Interval = 350 };
@@ -34,11 +33,11 @@ public sealed class MainWindow : Form
         AddButton("Copy all", () => { if (editor.TextLength > 0) Clipboard.SetText(editor.Text); });
         AddButton("Accept all", AcceptAll);
         AddButton("Rewrite…", RewriteSelection);
-        toolbar.Controls.Add(new Label { Text = "  English:", AutoSize = true, Padding = new Padding(0, 6, 0, 0) });
-        dialect.Items.AddRange(Enum.GetNames<Dialect>());
-        dialect.SelectedItem = Store.Shared.Prefs.Dialect.ToString();
-        dialect.SelectedIndexChanged += (_, _) => { Store.Shared.Prefs.Dialect = Enum.Parse<Dialect>((string)dialect.SelectedItem!); Store.Shared.Save(); Recheck(); };
-        toolbar.Controls.Add(dialect);
+        var langStrip = new MenuStrip { AutoSize = true, Dock = DockStyle.None, BackColor = toolbar.BackColor, Padding = new Padding(4, 2, 0, 0) };
+        var langMenu = new ToolStripMenuItem("Languages");
+        LanguageMenu.Fill(langMenu, Recheck);
+        langStrip.Items.Add(langMenu);
+        toolbar.Controls.Add(langStrip);
         toolbar.Controls.Add(new Label { Text = "  Formality:", AutoSize = true, Padding = new Padding(0, 6, 0, 0) });
         formality.Items.AddRange(Enum.GetNames<Formality>());
         formality.SelectedItem = Store.Shared.Prefs.DefaultGoals.Formality.ToString();

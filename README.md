@@ -20,6 +20,13 @@ The checking happens **on your Mac**. It uses Apple's built-in spelling and gram
 
 ## Features
 
+### What's new in 1.5 — English, Spanish and 25 more languages
+- **English and Spanish are both on by default.** Write in either, or mix them in one email: each paragraph is checked in its own language automatically.
+- **Choose your languages** from the menu bar (Mac) or tray icon (Windows) → **Languages**: English, Spanish, Italian, Portuguese (Brazil and Portugal), French, German, Dutch, Swedish, Danish, Norwegian, Finnish, Polish, Czech, Romanian, Hungarian, Greek, Turkish, Russian, Ukrainian, Bulgarian, Indonesian, Vietnamese, Hindi, Arabic, Hebrew and Korean (27 in all). Tick as many as you like; at least one stays on.
+- **Spanish grammar rules:** accents on question words (*¿Qué…?*, *¿Cómo…?*), *tú/tu*, *él/el*, *mí/mi*, *sí/si*, *está/esta*, *más/mas*; impersonal *haber* (*habían muchas personas* → *había*), *va a haber*, *a ver*, *he hecho*, *hay/ahí*; *dequeísmo* and *queísmo*; *dijistes* → *dijiste*; gender (*el problema*, *la reunión*), *del/al*; opening ¿ and ¡; lowercase days, months and languages; common misspellings (*a la vez*, *tal vez*, *por favor*, *o sea*). Tested on 38 typical mistakes (all caught) and 45 correct business sentences (no false alarms).
+- **Every language** gets spelling from the system dictionary (macOS, or Windows' installed language packs), punctuation checks, and AI suggestions that keep your language and never translate it. Rewrites also stay in the language you wrote in.
+- English-only features (autocorrect of English typos, tone, wordiness) switch off automatically while you write in another language.
+
 ### What's new in 1.4 — more accurate, safer, fully reviewed
 - **Catches more real mistakes.** A new set of 46 everyday business-writing errors is now caught in full: *send me there contact details*, *for you're help*, *whose going*, *Lets meet*, *since five years*, *the amount of people*, *will effect everyone*, *very unique*, and comma splices like *Thank you for your email, I will review it today*. The original 64-error set is still caught in full.
 - **Fewer false alarms.** A set of 51 tricky but correct sentences (*an MBA*, *a one-time fee*, *assess the risks*, *the most honest*, *If you need anything else, please let me know*, *None of the files were…*, *that that*, *If I were you*) gets no grammar or spelling flags. "The team are…" is accepted in British, Australian, Canadian and Indian English.

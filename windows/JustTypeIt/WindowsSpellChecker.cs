@@ -12,32 +12,38 @@ public sealed class WindowsSpellChecker : ISpellChecker
     public static readonly WindowsSpellChecker Shared = new();
     readonly Dictionary<string, ISpellCheckerCom?> checkers = new();
 
-    static string Tag(Dialect d) => d switch
+    /// A checker for the language tag; for a language Windows hasn't installed, the base language
+    /// (es-MX for es-ES) or nothing, so words are never flagged by the wrong dictionary.
+    ISpellCheckerCom? Get(string requested)
     {
-        Dialect.British => "en-GB", Dialect.Canadian => "en-CA", Dialect.Australian => "en-AU", Dialect.Indian => "en-IN", _ => "en-US",
-    };
-
-    ISpellCheckerCom? Get(Dialect d)
-    {
-        var tag = Tag(d);
         lock (checkers)
         {
-            if (checkers.TryGetValue(tag, out var c)) return c;
+            if (checkers.TryGetValue(requested, out var c)) return c;
+            c = null;
             try
             {
                 var factory = (ISpellCheckerFactory)new SpellCheckerFactoryClass();
-                if (factory.IsSupported(tag) == 0) tag = "en-US";
-                c = factory.CreateSpellChecker(tag);
+                var tag = requested;
+                if (factory.IsSupported(tag) == 0)
+                {
+                    var prefix = requested.Split('-')[0] + "-";
+                    var all = factory.SupportedLanguages;
+                    tag = "";
+                    while (all.Next(1, out var t, IntPtr.Zero) == 0) if (t.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) { tag = t; break; }
+                }
+                if (tag.Length > 0) c = factory.CreateSpellChecker(tag);
             }
             catch { c = null; }
-            checkers[Tag(d)] = c;
+            checkers[requested] = c;
             return c;
         }
     }
 
-    public IEnumerable<(int start, int length, IReadOnlyList<string> suggestions)> Check(string text, Dialect dialect)
+    public bool Supports(string tag) => Get(tag) != null;
+
+    public IEnumerable<(int start, int length, IReadOnlyList<string> suggestions)> Check(string text, string languageTag)
     {
-        var checker = Get(dialect);
+        var checker = Get(languageTag);
         if (checker == null || text.Length == 0) return Array.Empty<(int, int, IReadOnlyList<string>)>();
         var results = new List<(int, int, IReadOnlyList<string>)>();
         try

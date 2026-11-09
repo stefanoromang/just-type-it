@@ -17,6 +17,8 @@
     <None Include="../../Tests/clean-corpus.txt" Link="clean-corpus.txt" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../Tests/hard-errors.txt" Link="hard-errors.txt" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../Tests/clean-tricky.txt" Link="clean-tricky.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../Tests/spanish-errors.txt" Link="spanish-errors.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../Tests/spanish-clean.txt" Link="spanish-clean.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

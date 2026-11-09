@@ -113,14 +113,8 @@ struct MainView: View {
                 Spacer()
                 Button { showGoals = true } label: { Label("Goals", systemImage: "target") }
                     .help("Set intent, audience, formality and domain")
-                Menu {
-                    ForEach(Dialect.allCases) { d in
-                        Button { store.prefs.dialect = d; model.recheck(immediate: true) } label: {
-                            if store.prefs.dialect == d { Label(d.label, systemImage: "checkmark") } else { Text(d.label) }
-                        }
-                    }
-                } label: { Text(store.prefs.dialect.label.replacingOccurrences(of: " English", with: "")) }
-                .fixedSize()
+                LanguageMenu(store: store) { model.recheck(immediate: true) }
+                    .fixedSize()
                 Button { showSendCheck = true } label: { Label("Ready to send?", systemImage: "paperplane") }
                     .help("Final check before you send: mistakes, attachments, tone")
                     .popover(isPresented: $showSendCheck, arrowEdge: .bottom) {

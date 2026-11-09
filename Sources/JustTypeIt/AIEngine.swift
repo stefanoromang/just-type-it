@@ -75,8 +75,10 @@ enum AIEngine {
     /// Asks the model to correct each sentence, then diffs word-by-word to produce precise suggestions.
     static func deepCheck(_ text: String, goals: Goals, dialect: Dialect, brand: String, existing: [Issue]) async -> [Issue] {
         guard available else { return [] }
+        let code = Language.detect(text, among: Store.shared.prefs.languages)
+        let langName = code == "en" ? dialect.label : Language.named(code).name
         let ins = """
-        You are an expert proofreader for \(dialect.label). Correct the sentence: fix grammar, spelling, punctuation, agreement, verb tense, articles, prepositions and word choice.
+        You are an expert proofreader for \(langName). The text is in \(langName); keep it in \(langName) and never translate it. Correct the sentence: fix grammar, spelling, punctuation, agreement, verb tense, articles, prepositions and word choice.
         Make the smallest changes needed. Keep the meaning, the words and the style. Do not rephrase correct parts.
         Output ONLY the corrected sentence. If it is already correct, output it unchanged.
         """

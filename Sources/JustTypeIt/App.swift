@@ -146,11 +146,7 @@ struct MenuBarContent: View {
             Button("Until Tomorrow") { everywhere.pausedUntil = Calendar.current.startOfDay(for: Date().addingTimeInterval(86400)) }
             if everywhere.pausedUntil != nil { Button("Resume Now") { everywhere.pausedUntil = nil } }
         }
-        Menu("English: \(store.prefs.dialect.label.replacingOccurrences(of: " English", with: ""))") {
-            ForEach(Dialect.allCases) { d in
-                Button { store.prefs.dialect = d } label: { if store.prefs.dialect == d { Label(d.label, systemImage: "checkmark") } else { Text(d.label) } }
-            }
-        }
+        LanguageMenu(store: store)
         if let app = NSWorkspace.shared.menuBarOwningApplication, let bid = app.bundleIdentifier, bid != Bundle.main.bundleIdentifier {
             Button(store.prefs.excludedApps.contains(bid) ? "Resume in \(app.localizedName ?? bid)" : "Pause in \(app.localizedName ?? bid)") {
                 if let i = store.prefs.excludedApps.firstIndex(of: bid) { store.prefs.excludedApps.remove(at: i) } else { store.prefs.excludedApps.append(bid) }
