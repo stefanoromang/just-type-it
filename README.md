@@ -241,6 +241,8 @@ After changing grammar rules on the Mac side, refresh the shared file:
 
 GitHub Actions builds and tests both apps on every push, runs the Windows self-test on a real Windows machine, and attaches the Windows installer and portable zip to each release.
 
+For a full guide to changing, testing and publishing both apps, see [Making changes](docs/MAKING-CHANGES.md).
+
 ## Uninstall
 
 **Windows:** Settings → Apps → Installed apps → Just Type It → Uninstall (or delete `%LOCALAPPDATA%\Programs\JustTypeIt` if you used the portable zip).
