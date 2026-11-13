@@ -35,6 +35,7 @@ public class EngineTests
     [InlineData("Hi Team\n\nThanks for coming.", "Hi Team,")]
     [InlineData("this email Is our time to collect it.", "is")]
     [InlineData("We need the 4 difference colors now.", "different colors")]
+    [InlineData("He did good on the exam.", "did well")]
     public void FindsAndFixes(string text, string expected)
     {
         var found = Check(text);
@@ -49,9 +50,7 @@ public class EngineTests
         var missed = lines.Where(l => !Check(l).Any(i => i.Group == IssueGroup.Correctness)).ToList();
         foreach (var m in missed) log.WriteLine("MISSED: " + m);
         log.WriteLine($"recall {lines.Count - missed.Count}/{lines.Count}");
-        // Without a dictionary-based spell checker (that's Windows' job at runtime), only a
-        // handful of pure misspellings can be missed.
-        Assert.True(missed.Count <= 5, $"missed {missed.Count}: {string.Join(" | ", missed)}");
+        Assert.Empty(missed);
     }
 
     [Fact]
@@ -60,7 +59,7 @@ public class EngineTests
         var text = File.ReadAllText("clean-corpus.txt");
         var flags = Check(text).Where(i => i.Group == IssueGroup.Correctness).ToList();
         foreach (var f in flags) log.WriteLine("FLAG: " + f);
-        Assert.True(flags.Count <= 2, string.Join(" | ", flags));
+        Assert.Empty(flags);
     }
 
     [Fact]
@@ -70,7 +69,7 @@ public class EngineTests
         var missed = lines.Where(l => !Check(l).Any(i => i.Group == IssueGroup.Correctness)).ToList();
         foreach (var m in missed) log.WriteLine("MISSED: " + m);
         log.WriteLine($"hard recall {lines.Count - missed.Count}/{lines.Count}");
-        Assert.True(missed.Count <= 3, $"missed {missed.Count}: {string.Join(" | ", missed)}");
+        Assert.Empty(missed);
     }
 
     [Fact]

@@ -30,10 +30,15 @@ public static class RuleEngine
         var issues = new List<Issue>();
         if (other.Count > 0)
         {
-            foreach (var (start, end, lang) in other)
-                foreach (var i in OtherLanguage(text[start..end], lang, o)) { i.Start += start; issues.Add(i); }
-            var english = EnglishIssues(text, o).Where(i => !other.Any(p => i.Start >= p.start && i.Start < p.end || i.Start < p.start && i.End > p.start));
-            return Dedupe(issues.Concat(english).ToList(), text);
+            int pos = 0;
+            foreach (var line in text.Split('\n'))
+            {
+                var lang = JustTypeIt.Languages.Detect(line, o.Languages);
+                var local = lang == "en" ? EnglishIssues(line, o) : OtherLanguage(line, lang, o);
+                foreach (var i in local) { i.Start += pos; issues.Add(i); }
+                pos += line.Length + 1;
+            }
+            return Dedupe(issues, text);
         }
         return Dedupe(EnglishIssues(text, o), text);
     }

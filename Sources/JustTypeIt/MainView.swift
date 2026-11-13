@@ -37,6 +37,8 @@ struct MainView: View {
     @VState private var showGoals = false
     @VState private var showSendCheck = false
     @VState private var search = ""
+    @VState private var rewriteSource: (text: String, full: String, range: NSRange)?
+    @VState private var showRewrite = false
 
     var body: some View {
         NavigationSplitView {
@@ -57,6 +59,22 @@ struct MainView: View {
         .onReceive(NotificationCenter.default.publisher(for: .openDocument)) { _ in openFile() }
         .onReceive(NotificationCenter.default.publisher(for: .exportDocument)) { _ in exportFile() }
         .sheet(isPresented: $showGoals) { GoalsSheet(model: model) }
+        .sheet(isPresented: $showRewrite) {
+            if let src = rewriteSource {
+                RewritePanelView(original: src.text, aiAvailable: AIEngine.available, replace: { result in
+                    if model.text == src.full { model.replace(src.range, with: result) }
+                    else {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(result, forType: .string)
+                        model.status = "The draft changed. The result is on your clipboard instead."
+                    }
+                    showRewrite = false
+                }, copy: { result in
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(result, forType: .string)
+                }, close: { showRewrite = false })
+            }
+        }
     }
 
     // MARK: Sidebar
@@ -113,6 +131,16 @@ struct MainView: View {
                 Spacer()
                 Button { showGoals = true } label: { Label("Goals", systemImage: "target") }
                     .help("Set intent, audience, formality and domain")
+                Button {
+                    let full = model.text
+                    let selection = model.textView?.selectedRange() ?? NSRange(location: 0, length: 0)
+                    let range = selection.length > 0 ? selection : NSRange(location: 0, length: (full as NSString).length)
+                    rewriteSource = (TextUtil.substring(full, range), full, range)
+                    showRewrite = true
+                } label: { Image(systemName: "wand.and.stars") }
+                    .accessibilityLabel("Rewrite or translate selected text")
+                    .help("Rewrite or translate selected text with your seven Quick Actions")
+                    .disabled(model.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 LanguageMenu(store: store) { model.recheck(immediate: true) }
                     .fixedSize()
                 Button { showSendCheck = true } label: { Label("Ready to send?", systemImage: "paperplane") }

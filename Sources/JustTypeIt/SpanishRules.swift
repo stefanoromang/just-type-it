@@ -66,7 +66,7 @@ enum SpanishRules {
             r("\\bahí que (\\w+(?:ar|er|ir))\\b", "hay que $1", "Spanish/Hay", "Hay / ahí", "“Hay que” (verbo haber); “ahí” es un lugar."),
             r("\\b(por|de) hay\\b(?!\\s+(?:que|un|una|mucho|mucha|muchos|muchas|algo|nada|más|menos|varios|varias)\\b)", "$1 ahí",
               "Spanish/Hay", "Ahí / hay", "“Ahí” indica lugar (por ahí, de ahí); “hay” es del verbo haber."),
-            r("\\bhay (está|están|estaba|tienes|va|viene|lo|la|los|las)\\b", "ahí $1", "Spanish/Hay", "Ahí / hay",
+            r("\\bhay (está|están|estaba|tienes|va|viene)\\b", "ahí $1", "Spanish/Hay", "Ahí / hay",
               "“Ahí” indica lugar (ahí está); “hay” es del verbo haber."),
         ]
         return out
@@ -108,7 +108,7 @@ enum SpanishRules {
         let pairs: [(String, String)] = [
             ("a la ves", "a la vez"), ("tal ves", "tal vez"), ("otra ves", "otra vez"), ("una ves", "una vez"), ("cada ves", "cada vez"),
             ("talvez", "tal vez"), ("osea", "o sea"), ("aveces", "a veces"), ("enserio", "en serio"), ("porfavor", "por favor"),
-            ("apesar", "a pesar"), ("haci", "así"), ("aser", "hacer"), ("asiendo", "haciendo"), ("echo de menos", "echo de menos"),
+            ("apesar", "a pesar"), ("haci", "así"), ("aser", "hacer"),
             ("nose", "no sé"), ("nos vemos mañana", "nos vemos mañana"), ("almenos", "al menos"), ("encambio", "en cambio"),
             ("deacuerdo", "de acuerdo"), ("sinembargo", "sin embargo"), ("hechar", "echar"), ("ubiera", "hubiera"), ("ubo", "hubo"),
             ("nesecito", "necesito"), ("nesesito", "necesito"), ("nececito", "necesito"), ("exelente", "excelente"), ("ecelente", "excelente"),

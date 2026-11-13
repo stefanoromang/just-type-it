@@ -320,7 +320,7 @@
       "explanation" : "Use “in” with this adjective.",
       "group" : "correctness",
       "kind" : "Grammar\/Preposition",
-      "pattern" : "\\b(interested|good|bad) on\\b",
+      "pattern" : "\\b(interested) on\\b",
       "replacement" : "$1 in",
       "title" : "Preposition"
     },
@@ -377,6 +377,15 @@
       "pattern" : "(?<!\\b(?:he|she|it) )\\b(dont|cant|wont|didnt|doesnt|isnt|wasnt|arent|werent|shouldnt|couldnt|wouldnt|havent|hasnt|im|ive|youre|theyre|thats|whats|lets go)\\b",
       "replacement" : "",
       "title" : "Missing apostrophe"
+    },
+    {
+      "caseInsensitive" : true,
+      "explanation" : "For performance, use “well”: “did well on the exam”. “Did good” can also mean helped others, so it is not always an error.",
+      "group" : "correctness",
+      "kind" : "Grammar\/AdverbAdjective",
+      "pattern" : "\\b(did|does|do) good(?= (?:on|in|at) (?:the |an? |my |your |his |her |our |their )?(?:exam|test|assessment|interview|assignment|project|job|presentation|task)\\b)",
+      "replacement" : "$1 well",
+      "title" : "Adjective vs. adverb"
     },
     {
       "caseInsensitive" : true,
@@ -779,7 +788,7 @@
       "explanation" : "To describe how someone does something, use the adverb “well”, not “good”.",
       "group" : "correctness",
       "kind" : "Grammar\/AdverbAdjective",
-      "pattern" : "\\b(plays|play|played|did|does|do|sings|sang|works|worked|speaks|spoke|writes|wrote|runs|ran|went|goes|performed|performs|cooks|cooked|dances|danced|drives|drove) (\\w+ ){0,2}(very |really |so )?good\\b(?<!\\bgoes good|\\bwent good)",
+      "pattern" : "\\b(plays|play|played|sings|sang|works|worked|speaks|spoke|writes|wrote|runs|ran|went|goes|performed|performs|cooks|cooked|dances|danced|drives|drove) (\\w+ ){0,2}(very |really |so )?good\\b(?<!\\bgoes good|\\bwent good)",
       "replacement" : "",
       "title" : "Adjective vs. adverb"
     },
@@ -2524,7 +2533,7 @@
       "explanation" : "“Ahí” indica lugar (ahí está); “hay” es del verbo haber.",
       "group" : "correctness",
       "kind" : "Spanish\/Hay",
-      "pattern" : "\\bhay (está|están|estaba|tienes|va|viene|lo|la|los|las)\\b",
+      "pattern" : "\\bhay (está|están|estaba|tienes|va|viene)\\b",
       "replacement" : "ahí $1",
       "title" : "Ahí \/ hay"
     },
@@ -2760,15 +2769,6 @@
       "kind" : "Spanish\/Spelling",
       "pattern" : "\\baser\\b",
       "replacement" : "hacer",
-      "title" : "Ortografía"
-    },
-    {
-      "caseInsensitive" : true,
-      "explanation" : "Se escribe “haciendo”.",
-      "group" : "correctness",
-      "kind" : "Spanish\/Spelling",
-      "pattern" : "\\basiendo\\b",
-      "replacement" : "haciendo",
       "title" : "Ortografía"
     },
     {

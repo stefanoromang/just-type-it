@@ -179,6 +179,7 @@ struct Prefs: Codable {
     var dialect: Dialect = .american
     /// Languages you write in (codes from Language.all). Each paragraph is checked in its own language.
     var languages: [String] = Language.defaults
+    var quickActions: [RewriteMode] = RewriteMode.primary
     var defaultGoals = Goals()
     var dictionary: [String] = []
     var styleRules: [StyleRule] = []
@@ -211,6 +212,7 @@ struct Prefs: Codable {
         dialect = (try? c.decode(Dialect.self, forKey: .dialect)) ?? def.dialect
         languages = ((try? c.decode([String].self, forKey: .languages)) ?? def.languages).filter { code in Language.all.contains { $0.code == code } }
         if languages.isEmpty { languages = def.languages }
+        quickActions = RewriteMode.normalized(((try? c.decode([String].self, forKey: .quickActions)) ?? []).compactMap(RewriteMode.init(rawValue:)))
         defaultGoals = (try? c.decode(Goals.self, forKey: .defaultGoals)) ?? def.defaultGoals
         dictionary = (try? c.decode([String].self, forKey: .dictionary)) ?? def.dictionary
         styleRules = (try? c.decode([StyleRule].self, forKey: .styleRules)) ?? def.styleRules

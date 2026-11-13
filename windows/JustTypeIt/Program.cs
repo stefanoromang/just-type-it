@@ -168,6 +168,7 @@ static class QuickCheck
         try
         {
             var source = InputHelper.GetForegroundWindow();
+            var selection = InputHelper.CaptureSelection();
             var text = await InputHelper.CopySelection(Keys.G);
             if (text.Trim().Length == 0)
             {
@@ -182,7 +183,8 @@ static class QuickCheck
                 issues.Any(i => i.Replacements.Count > 0) ? MessageBoxButtons.YesNo : MessageBoxButtons.OK);
             if (answer != DialogResult.Yes) return;
             if (!await RewriteWindow.ReturnTo(source)) { Clipboard.SetText(fixedText.Replace("\n", "\r\n")); MessageBox.Show("Couldn't switch back to the app. The corrected text is on your clipboard; press Ctrl+V to paste it.", "Just Type It"); return; }
-            await InputHelper.Paste(fixedText);
+            if (!InputHelper.MatchesSelection(selection)) { Clipboard.SetText(fixedText); MessageBox.Show("The original selection changed or could not be verified. The corrected text is on your clipboard; select where it belongs and press Ctrl+V.", "Just Type It"); return; }
+            await InputHelper.Paste(fixedText, canPaste: () => InputHelper.MatchesSelection(selection));
         }
         catch (Exception e) { MessageBox.Show("Quick Check couldn't finish: " + e.Message, "Just Type It"); }
     }

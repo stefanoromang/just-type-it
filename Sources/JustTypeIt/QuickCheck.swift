@@ -12,6 +12,10 @@ final class QuickCheck {
     static let shared = QuickCheck()
     private var panel: NSPanel?
     private var sourceApp: NSRunningApplication?
+    private var sourceElement: AXUIElement?
+    private var sourceRange: NSRange?
+    private var originalText = ""
+    private var sourceSnapshot: String?
     private var hotKeyRef: EventHotKeyRef?
 
     func installHotkey() {
@@ -22,12 +26,22 @@ final class QuickCheck {
     func run() {
         sourceApp = NSWorkspace.shared.frontmostApplication
         if sourceApp?.bundleIdentifier == Bundle.main.bundleIdentifier { sourceApp = nil }
+        sourceElement = nil; sourceRange = nil; sourceSnapshot = nil
+        if let app = sourceApp {
+            let ax = AXUIElementCreateApplication(app.processIdentifier)
+            if let el = FocusedEditor.resolve(app: ax, pid: app.processIdentifier, bundleID: app.bundleIdentifier ?? "") {
+                sourceElement = el
+                sourceRange = AccessibilityEdit.selection(el)
+                sourceSnapshot = FocusedEditor.string(el, kAXValueAttribute)
+            }
+        }
         Task {
             let text = await copySelection()
             guard let text, !text.isEmpty else {
                 show(text: "", canReplace: false, note: "Select some text in any app, then press ⌃⌥G. (Allow Accessibility for Just Type It in System Settings › Privacy & Security if nothing happens.)")
                 return
             }
+            originalText = text
             show(text: text, canReplace: true)
         }
     }
@@ -61,7 +75,11 @@ final class QuickCheck {
                 copyWithNotice(result, "Couldn't switch back to \(app.localizedName ?? "the app"). The corrected text is on your clipboard; press ⌘V to paste it.")
                 return
             }
-            pastePublic(result)
+            if let el = sourceElement, let range = sourceRange, let full = FocusedEditor.string(el, kAXValueAttribute),
+               full == sourceSnapshot, TextUtil.substring(full, range) == originalText,
+               await AccessibilityEdit.apply(editor: el, appPID: app.processIdentifier, bundleID: app.bundleIdentifier ?? "",
+                                             snapshot: full, range: range, original: originalText, replacement: result) { return }
+            copyWithNotice(result, "The original selection could not be verified. The corrected text is on your clipboard; select where it belongs and press ⌘V.")
         }
     }
 
@@ -70,7 +88,7 @@ final class QuickCheck {
         for _ in 0..<40 {
             if NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier {
                 try? await Task.sleep(nanoseconds: 120_000_000)   // let its window take focus
-                return true
+                return !Task.isCancelled && NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier
             }
             try? await Task.sleep(nanoseconds: 50_000_000)
         }
@@ -131,11 +149,6 @@ final class QuickCheck {
             if pb.changeCount != before { break }
         }
         guard pb.changeCount != before else {
-            // Slow app: if the copy lands late, still put the user's clipboard back.
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 1_500_000_000)
-                if pb.changeCount != before { Self.restoreClipboard(saved, ifUnchangedSince: pb.changeCount) }
-            }
             return nil
         }
         let s = pb.string(forType: .string)

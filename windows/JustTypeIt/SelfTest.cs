@@ -83,6 +83,11 @@ static class SelfTest
                     var range = ((TextPattern)tp3).DocumentRange.FindText("He dont care.", false, false);
                     range?.Select();
                     Thread.Sleep(300);
+                    var snapshot = InputHelper.CaptureSelection();
+                    Record("Selected-text snapshot matches", snapshot != null && InputHelper.MatchesSelection(snapshot));
+                    ((TextPattern)tp3).DocumentRange.Select();
+                    Record("Changed selection is rejected", !InputHelper.MatchesSelection(snapshot));
+                    range?.Select();
                     var selected = ((TextPattern)tp3).GetSelection().FirstOrDefault()?.GetText(-1) ?? "";
                     var fixedText = Rewriter.Offline(selected, RewriteMode.GrammarOnly) ?? selected;
                     Clipboard.SetText(fixedText);

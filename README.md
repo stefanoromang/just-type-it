@@ -20,6 +20,13 @@ The checking happens **on your Mac**. It uses Apple's built-in spelling and gram
 
 ## Features
 
+### What's new in 1.6 — seven Quick Actions and protected translation
+- **Seven buttons for selected text:** Professional, Enthusiastic, Casual, Shorter, Fix Grammar, Translate to Spanish, and Translate to English. Click **Customize…** to change any slot; your choices are saved. The older styles remain under **More styles…**.
+- **English ↔ Spanish translation** runs locally with Apple Intelligence on Mac or an installed Ollama model on Windows. Results are previews, never automatic edits. Translations that change numeric details, URLs or email addresses are rejected. This protects those details, not the accuracy of every translated word; always review important writing.
+- **Faster first result:** one version is shown first; **Try again** produces another. Grammar underlines start after a short typing pause, while deeper AI suggestions follow later. Cached checks on a 2,800-word document measured about 23 ms on the development Mac (previously 204 ms); timings vary by hardware and document.
+- **Safer editing:** preserve the original text snapshot and range, abort when the draft changes, check the foreground app again, and copy the result rather than blindly pasting when the target cannot be verified. Cross-app autocorrect now waits for keyboard idle time.
+- **Two ten-check reviews:** see [the review report](docs/REVIEW-1.6.md) for coverage, test results, competitor reference and remaining limitations.
+
 ### What's new in 1.5 — English, Spanish and 25 more languages
 - **English and Spanish are both on by default.** Write in either, or mix them in one email: each paragraph is checked in its own language automatically.
 - **Choose your languages** from the menu bar (Mac) or tray icon (Windows) → **Languages**: English, Spanish, Italian, Portuguese (Brazil and Portugal), French, German, Dutch, Swedish, Danish, Norwegian, Finnish, Polish, Czech, Romanian, Hungarian, Greek, Turkish, Russian, Ukrainian, Bulgarian, Indonesian, Vietnamese, Hindi, Arabic, Hebrew and Korean (27 in all). Tick as many as you like; at least one stays on.
@@ -145,7 +152,7 @@ The checking happens **on your Mac**. It uses Apple's built-in spelling and gram
 | Spelling | macOS spell checker | Windows spell checker (same one Office uses) |
 | Clarity, tone, inclusive language, dialects, scores | ✅ | ✅ |
 | Check selected text in any app | ⌃⌥G | Ctrl+Alt+G |
-| Rewrite highlighted text in any app (17 styles, up to 3 versions) | ⌃⌥R or ✨ button | Ctrl+Alt+R |
+| Seven customizable rewrite / translation actions for selected text | ⌃⌥R or ✨ button | Ctrl+Alt+R |
 | Editor window with suggestions and scores | ✅ | ✅ |
 | Starts automatically, runs in the menu bar / system tray | ✅ | ✅ |
 | Autocorrect obvious typos as you type | ✅ | ✅ |

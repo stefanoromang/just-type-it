@@ -91,6 +91,8 @@ struct TextEditorView: NSViewRepresentable {
             defer { lastLength = (tv.string as NSString).length }
             guard Store.shared.prefs.autocorrect, len == lastLength + 1 else { return }
             let caret = tv.selectedRange().location
+            let paragraph = (tv.string as NSString).paragraphRange(for: NSRange(location: min(caret, len), length: 0))
+            guard Language.detect(TextUtil.substring(tv.string, paragraph), among: Store.shared.prefs.languages) == "en" else { return }
             guard let fix = Proactive.autocorrect(tv.string, caret: caret, dictionary: Set(Store.shared.prefs.dictionary.map { $0.lowercased() })),
                   tv.shouldChangeText(in: fix.range, replacementString: fix.replacement) else { return }
             tv.textStorage?.replaceCharacters(in: fix.range, with: fix.replacement)

@@ -87,6 +87,22 @@ enum SelfTest {
                 if !ok { fails += 1 }
                 print(ok ? "PASS" : "FAIL", "offline", mode.label, "→", r.prefix(140))
             }
+            let translations: [(String, RewriteMode, String, String)] = [
+                ("Please send the invoice for 1250 euros by Friday. Order A729.", .spanish, "es", "A729"),
+                ("Por favor, envía la factura de 1250 euros antes del viernes. Pedido A729.", .english, "en", "A729"),
+                ("Stefano will deliver 24 boxes on 12/11/2026. Details: https://example.com/order/729", .spanish, "es", "https://example.com/order/729"),
+                ("Stefano entregará 24 cajas el 12/11/2026. Detalles: https://example.com/order/729", .english, "en", "https://example.com/order/729"),
+            ]
+            for (input, mode, language, protected) in translations {
+                let start = Date()
+                let output = await Rewriter.versions(of: input, mode: mode, count: 1).first ?? ""
+                let detected = Language.detect(output, among: ["en", "es"])
+                let inputNumbers = TextUtil.matches("[0-9]+", in: input).map { TextUtil.substring(input, $0.range) }
+                let outputNumbers = TextUtil.matches("[0-9]+", in: output).map { TextUtil.substring(output, $0.range) }
+                let ok = !output.isEmpty && detected == language && output.contains(protected) && inputNumbers == outputNumbers
+                if !ok { fails += 1 }
+                print(ok ? "PASS" : "FAIL", "translation", mode.label, String(format: "%.2fs", Date().timeIntervalSince(start)), "→", output)
+            }
             let custom = await Rewriter.versions(of: text, mode: .improve, custom: "make it sound like a pirate", count: 1)
             if custom.isEmpty { fails += 1 }
             print(custom.isEmpty ? "FAIL" : "PASS", "custom instruction →", custom.first?.prefix(140) ?? "-")
@@ -116,15 +132,38 @@ enum SelfTest {
             ("The team discussed about it alot.", ["discussed", "a lot"]),
             ("This is better then that.", ["better than"]),
             ("i went home.", ["I"]),
+            ("He did good on the exam.", ["did well"]),
         ]
         var fails = 0
         // Every grammar rule must compile; a broken pattern would silently disable it.
-        let broken = (RuleData.grammar + GrammarRules.all).filter { TextUtil.regex($0.pattern, caseInsensitive: $0.caseInsensitive) == nil }
+        let broken = (RuleData.grammar + GrammarRules.all + SpanishRules.all).filter { TextUtil.regex($0.pattern, caseInsensitive: $0.caseInsensitive) == nil }
         for b in broken { print("FAIL | rule does not compile:", b.title, b.pattern.prefix(80)) }
         if !broken.isEmpty { fails += 1 } else { print("PASS | all \(RuleData.grammar.count + GrammarRules.all.count) grammar rules compile") }
         var o = CheckOptions()
         o.goals = Goals()
         o.languages = ["en", "es"]
+        let quick = RewriteMode.primary
+        let quickOK = quick.count == 7 && Set(quick).count == 7 && quick.contains(.spanish) && quick.contains(.english)
+        let preferences = try? JSONDecoder().decode(Prefs.self, from: Data("{\"quickActions\":[\"casual\",\"unknown\"]}".utf8))
+        let migrated = preferences.map { $0.quickActions.count == 7 && $0.quickActions.first == .casual && $0.languages == Language.defaults } ?? false
+        let roundTrip = (try? JSONEncoder().encode(preferences ?? Prefs())).flatMap { try? JSONDecoder().decode(Prefs.self, from: $0) }
+        if !quickOK || !migrated || roundTrip?.quickActions != preferences?.quickActions { fails += 1 }
+        print(quickOK && migrated && roundTrip?.quickActions == preferences?.quickActions ? "PASS" : "FAIL", "| seven configurable Quick Actions and preference migration")
+        let safe = AccessibilityEdit.expectedText("Keep 😀 this unchanged", range: NSRange(location: 8, length: 4), original: "this", replacement: "that") == "Keep 😀 that unchanged"
+            && AccessibilityEdit.expectedText("Short", range: NSRange(location: 100, length: 1), original: "x", replacement: "y") == nil
+            && AccessibilityEdit.expectedText("Old text", range: NSRange(location: 0, length: 3), original: "New", replacement: "Next") == nil
+        if !safe { fails += 1 }
+        print(safe ? "PASS" : "FAIL", "| replacement boundaries, emoji and stale text")
+        let detailsSafe = Rewriter.translationPreservesDetails("Order 729: 24 boxes https://example.com/729", "Pedido 729: 24 cajas https://example.com/729")
+            && !Rewriter.translationPreservesDetails("Order 729: 24 boxes", "Pedido 729: 25 cajas")
+            && !Rewriter.translationPreservesDetails("Email me at sam@example.com", "Escribe a sam@wrong.com")
+        if !detailsSafe { fails += 1 }
+        print(detailsSafe ? "PASS" : "FAIL", "| translation rejects changed amounts and addresses")
+        let spanishSafe = !SpanishRules.all.contains { rule in
+            !TextUtil.matches(rule.pattern, in: "Estoy asiendo la cuerda. No hay lo que necesitamos.", caseInsensitive: rule.caseInsensitive).isEmpty
+        }
+        if !spanishSafe { fails += 1 }
+        print(spanishSafe ? "PASS" : "FAIL", "| Spanish rules preserve valid verbs and “hay lo que”")
         for (s, expect) in samples {
             let issues = RuleEngine.check(s, options: o)
             let flat = issues.map { "\($0.original)→\($0.replacements.first ?? "-") [\($0.title)]" }

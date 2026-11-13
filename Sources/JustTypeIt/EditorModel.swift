@@ -161,13 +161,15 @@ final class EditorModel: ObservableObject {
     }
 
     func replace(_ range: NSRange, with s: String) {
+        guard range.location >= 0, range.length >= 0, range.location <= text.utf16.count,
+              range.length <= text.utf16.count - range.location, Range(range, in: text) != nil else { return }
         if let tv = textView, tv.shouldChangeText(in: range, replacementString: s) {
             tv.textStorage?.replaceCharacters(in: range, with: s)
             tv.didChangeText()
             tv.setSelectedRange(NSRange(location: range.location + (s as NSString).length, length: 0))
         } else {
-            text = (text as NSString).replacingCharacters(in: range, with: s)
-            recheck(immediate: true)
+            guard textView == nil else { return }
+            textChanged((text as NSString).replacingCharacters(in: range, with: s))
         }
     }
 
@@ -199,6 +201,7 @@ final class EditorModel: ObservableObject {
     }
 
     func select(_ issue: Issue) {
+        guard TextUtil.substring(text, issue.range) == issue.original else { return }
         selectedIssueID = issue.id
         textView?.scrollRangeToVisible(issue.range)
         textView?.showFindIndicator(for: issue.range)

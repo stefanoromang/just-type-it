@@ -20,7 +20,7 @@ enum RuleEngine {
         for p in lineParagraphs(text) {
             // Each paragraph is checked in its own language (English, Spanish, Italian…).
             var po = o
-            po.language = Language.detect(p.text, among: o.languages)
+            po.language = cachedLanguage(p.text, among: o.languages)
             if !po.isEnglish { allEnglish = false }
             for var i in cachedLocal(p.text, po) {
                 i.range.location += p.range.location
@@ -63,6 +63,17 @@ enum RuleEngine {
 
     nonisolated(unsafe) private static var paragraphCache: [String: [Issue]] = [:]
     nonisolated(unsafe) private static var cacheKey = ""
+    private static var languageCache: [String: String] = [:]
+    private static var languageCodes: [String] = []
+
+    private static func cachedLanguage(_ text: String, among codes: [String]) -> String {
+        if languageCodes != codes { languageCache.removeAll(); languageCodes = codes }
+        if let hit = languageCache[text] { return hit }
+        let language = Language.detect(text, among: codes)
+        if languageCache.count >= 2000 { languageCache.removeAll() }
+        languageCache[text] = language
+        return language
+    }
 
     private static func cachedLocal(_ p: String, _ o: CheckOptions) -> [Issue] {
         if let hit = paragraphCache[p] { return hit.map { var i = $0; i.id = UUID(); return i } }
@@ -472,6 +483,7 @@ enum RuleEngine {
     }
 
     static func dedupe(_ issues: [Issue], text: String, o: CheckOptions) -> [Issue] {
+        let length = (text as NSString).length
         let protected = protectedRanges(text)
         let issues = issues.filter { i in i.range.length > 40 || !protected.contains { NSIntersectionRange($0, i.range).length > 0 } }
         let priority: [IssueGroup: Int] = [.correctness: 0, .clarity: 1, .delivery: 2, .engagement: 3]
@@ -482,7 +494,7 @@ enum RuleEngine {
         }
         var kept: [Issue] = []
         for i in sorted {
-            guard i.range.length > 0, NSMaxRange(i.range) <= (text as NSString).length else { continue }
+            guard i.range.location >= 0, i.range.location <= length, i.range.length > 0, i.range.length <= length - i.range.location else { continue }
             if i.replacements.first == i.original { continue }
             // Keep sentence-level hints even when they contain smaller issues.
             let wide = i.range.length > 40

@@ -29,6 +29,7 @@ public sealed class Everywhere : IDisposable
     string measuredFor = "";
     Rectangle measuredBounds;
     DateTime measuredAt;
+    string checkSettings = "";
     public string CurrentApp { get; private set; } = "";
     public int IssueCount => issues.Count;
     public bool Running => timer.Enabled;
@@ -48,7 +49,7 @@ public sealed class Everywhere : IDisposable
     }
 
     public void Start() { timer.Start(); }
-    public void Stop() { timer.Stop(); HideAll(); }
+    public void Stop() { timer.Stop(); autocorrectCts?.Cancel(); checkedText = null; HideAll(); }
     public void Dispose() { timer.Dispose(); overlay.Dispose(); badge.Dispose(); }
 
     void HideAll()
@@ -67,6 +68,9 @@ public sealed class Everywhere : IDisposable
         busy = true;
         try
         {
+            var prefs = Store.Shared.Prefs;
+            var settings = $"{string.Join(',', prefs.Languages)}|{prefs.Dialect}|{string.Join(',', prefs.Dictionary)}|{prefs.Passive}|{prefs.Hedging}|{prefs.Inclusive}";
+            if (settings != checkSettings) { checkSettings = settings; checkedText = null; issues.Clear(); marks.Clear(); measuredFor = ""; }
             if (PausedUntil is { } until) { if (DateTime.Now < until) { HideAll(); return; } PausedUntil = null; }
             var hwnd = GetForegroundWindow();
             GetWindowThreadProcessId(hwnd, out var pid);
@@ -79,6 +83,7 @@ public sealed class Everywhere : IDisposable
             }
             // UI Automation can block; never call it on the UI thread.
             var read = await Task.Run(() => ReadFocused((int)pid));
+            if (!Running || InputHelper.ForegroundProcessId() != pid) { HideAll(); return; }
             if (read == null) { element = null; HideAll(); return; }
             var (el, text, bounds) = read.Value;
             if (element == null || !Automation.Compare(el, element))
@@ -93,17 +98,17 @@ public sealed class Everywhere : IDisposable
                 lastText = text; lastChange = DateTime.Now; overlay.HideCard();
                 if (grew && Store.Shared.Prefs.Autocorrect) ScheduleAutocorrect(el, text);
             }
-            if (checkedText != text && (DateTime.Now - lastChange).TotalMilliseconds > 450)
+            if (checkedText != text && (DateTime.Now - lastChange).TotalMilliseconds > 200)
             {
                 checkedText = text;
                 var opts = Store.Shared.Options(GoalsFor(proc));
                 opts.Consistency = false;
                 var found = await Task.Run(() => RuleEngine.Check(text.Length > 20000 ? text[..20000] : text, opts));
-                if (checkedText != lastText) return;
+                if (!Running || checkedText != lastText || InputHelper.ForegroundProcessId() != pid) return;
                 issues = found.Where(i => !dismissed.Contains(i.Key) && i.Kind is not "Engagement/Repetition" and not "Style/Clarity/LongSentence").ToList();
                 Changed?.Invoke();
             }
-            var tone = Store.Shared.Prefs.ShowTone ? Proactive.ToneEmoji(text) : null;
+            var tone = Store.Shared.Prefs.ShowTone && Languages.Detect(text, Store.Shared.Prefs.Languages) == "en" ? Proactive.ToneEmoji(text) : null;
             if (issues.Count == 0)
             {
                 overlay.Hide();
@@ -261,9 +266,9 @@ public sealed class Everywhere : IDisposable
     {
         autocorrectCts?.Cancel();
         var cts = autocorrectCts = new CancellationTokenSource();
-        _ = Task.Delay(450, cts.Token).ContinueWith(async t =>
+        _ = Task.Delay(700, cts.Token).ContinueWith(async t =>
         {
-            if (t.IsCanceled || lastText != text || applying) return;
+            if (t.IsCanceled || !Running || !InputHelper.InputIsIdle() || lastText != text || applying) return;
             int caret = await Task.Run(() => Caret(el, text));
             if (caret < 0) return;
             var dict = new HashSet<string>(Store.Shared.Prefs.Dictionary.Select(w => w.ToLowerInvariant()));
@@ -321,7 +326,7 @@ public sealed class Everywhere : IDisposable
     /// Replaces the flagged text inside the other app, then verifies the result.
     public async Task<bool> Apply(Issue issue, string replacement, bool restoreCaret = false, int caretBefore = -1)
     {
-        if (applying || element == null) return false;
+        if (applying || !Running || element == null || (restoreCaret && !InputHelper.InputIsIdle())) return false;
         applying = true;
         overlay.HideCard();
         try
@@ -346,13 +351,18 @@ public sealed class Everywhere : IDisposable
             await Task.Delay(60);
             // Abort if the user kept typing or switched apps: never paste into the wrong place.
             var still = await Task.Run(() => ReadText(el));
-            if (still != before || InputHelper.ForegroundProcessId() != (uint)elementPid) { checkedText = null; return false; }
+            if (!Running || (restoreCaret && !InputHelper.InputIsIdle()) || still != before || InputHelper.ForegroundProcessId() != (uint)elementPid)
+            {
+                if (restoreCaret && caretBefore >= 0 && still == before)
+                    await Task.Run(() => { try { if (el.TryGetCurrentPattern(TextPattern.Pattern, out var tp)) RangeFor((TextPattern)tp, before, caretBefore, 0)?.Select(); } catch { } });
+                checkedText = null; return false;
+            }
             string? now = null;
             await InputHelper.Paste(replacement, async () =>
             {
                 now = await Task.Run(() => ReadText(el));
                 return now == expected || (now != null && now != before);
-            });
+            }, canPaste: () => Running && (!restoreCaret || InputHelper.InputIsIdle()));
             if (now == expected)
             {
                 if (restoreCaret && caretBefore >= 0)

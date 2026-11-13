@@ -7,9 +7,9 @@ import Carbon.HIToolbox
 import SwiftUI
 
 /// Rewrite styles offered for highlighted text, in any app.
-enum RewriteMode: String, CaseIterable, Identifiable {
+enum RewriteMode: String, Codable, CaseIterable, Identifiable {
     case improve, professional, casual, shorter, longer, enthusiastic, friendly, confident, clearer, simpler,
-         formal, diplomatic, persuasive, grammarOnly, bullets, summarize, reply
+         formal, diplomatic, persuasive, grammarOnly, bullets, summarize, reply, spanish, english
     var id: String { rawValue }
 
     var label: String {
@@ -31,6 +31,8 @@ enum RewriteMode: String, CaseIterable, Identifiable {
         case .bullets: "Bullet points"
         case .summarize: "Summarize"
         case .reply: "Write a reply"
+        case .spanish: "Translate to Spanish"
+        case .english: "Translate to English"
         }
     }
 
@@ -53,11 +55,24 @@ enum RewriteMode: String, CaseIterable, Identifiable {
         case .bullets: "list.bullet"
         case .summarize: "text.alignleft"
         case .reply: "arrowshape.turn.up.left"
+        case .spanish, .english: "character.bubble"
         }
     }
 
-    /// The modes shown first; the rest are under "More".
-    static let primary: [RewriteMode] = [.improve, .professional, .casual, .shorter, .enthusiastic, .friendly, .confident, .grammarOnly]
+    static let primary: [RewriteMode] = [.professional, .enthusiastic, .casual, .shorter, .grammarOnly, .spanish, .english]
+
+    static func normalized(_ modes: [RewriteMode]) -> [RewriteMode] {
+        Array((modes + primary).prefix(7))
+    }
+
+    var isTranslation: Bool { self == .spanish || self == .english }
+    var languageInstruction: String {
+        switch self {
+        case .spanish: "Write ONLY in Spanish. Translate from English when needed; do not translate into English."
+        case .english: "Write ONLY in English. Translate from Spanish when needed; do not translate into Spanish."
+        default: "Keep the original language. Do not translate."
+        }
+    }
 
     var instruction: String {
         switch self {
@@ -70,7 +85,7 @@ enum RewriteMode: String, CaseIterable, Identifiable {
         case .friendly: "Rewrite the text so it sounds warm, kind and friendly."
         case .confident: "Rewrite the text so it sounds confident and assertive: remove hedging like 'I think', 'maybe', 'just'."
         case .clearer: "Rewrite the text so it is as clear and easy to follow as possible."
-        case .simpler: "Rewrite the text in simple, plain English that anyone can understand."
+        case .simpler: "Rewrite the text in simple, plain language that anyone can understand."
         case .formal: "Rewrite the text in a formal register."
         case .diplomatic: "Rewrite the text so it is tactful and diplomatic, softening anything that could sound blunt."
         case .persuasive: "Rewrite the text so it is more persuasive and compelling."
@@ -78,6 +93,8 @@ enum RewriteMode: String, CaseIterable, Identifiable {
         case .bullets: "Turn the text into a short list of clear bullet points starting with '- '."
         case .summarize: "Summarize the text in one to three sentences."
         case .reply: "The text is a message the user received. Write a helpful, polite reply in the user's voice (first person). Never use placeholders like [Name]."
+        case .spanish: "Translate the text into natural Spanish, preserving meaning, tone, names, numbers, dates, URLs and paragraph breaks. If already Spanish, return it unchanged."
+        case .english: "Translate the text into natural English, preserving meaning, tone, names, numbers, dates, URLs and paragraph breaks. If already English, return it unchanged."
         }
     }
 
@@ -88,17 +105,20 @@ enum RewriteMode: String, CaseIterable, Identifiable {
 /// Produces rewrites: Apple Intelligence when available, rules otherwise.
 @MainActor
 enum Rewriter {
-    static func versions(of text: String, mode: RewriteMode, custom: String? = nil, count: Int = 3) async -> [String] {
-        let instruction = custom.map { "Rewrite the text following this instruction: \($0)" } ?? mode.instruction
+    static func versions(of text: String, mode: RewriteMode, custom: String? = nil, count: Int = 3, varied: Bool = false) async -> [String] {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, count > 0, text.utf16.count <= 6000 else { return [] }
+        let instruction = (custom.map { "Rewrite the text following this instruction: \($0)" } ?? mode.instruction) + "\n" + mode.languageInstruction
         var out: [String] = []
         if AIEngine.available {
             let goals = Store.shared.prefs.defaultGoals
             let brand = Store.shared.prefs.brandTone
             // First version: deterministic. Others: varied wording.
-            if let a = await AIEngine.transform(text, instruction, goals: goals, brand: brand) { out.append(clean(a)) }
-            if count > 1 && mode != .grammarOnly && mode != .summarize {
-                let ins = instruction + "\nKeep the original language. Do not invent facts. Output ONLY the resulting text, with no commentary or quotes."
+            if let a = await AIEngine.transform(text, instruction, goals: goals, brand: brand, preserveLanguage: false,
+                                              temperature: varied && !mode.isTranslation && mode != .grammarOnly ? 0.7 : 0) { out.append(clean(a)) }
+            if count > 1 && mode != .grammarOnly && mode != .summarize && !mode.isTranslation {
+                let ins = instruction + "\nDo not invent facts. Output ONLY the resulting text, with no commentary or quotes."
                 for _ in 1..<count {
+                    if Task.isCancelled { return [] }
                     if let b = await AIEngine.run(ins, "TEXT:\n<<<\n\(text)\n>>>", temperature: 0.8) {
                         let v = clean(b)
                         if !out.contains(v) && v != text { out.append(v) }
@@ -109,7 +129,7 @@ enum Rewriter {
         // The model sometimes returns the text unchanged; ask once more, more firmly.
         let unchanged: (String) -> Bool = { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
         out.removeAll(where: unchanged)
-        if out.isEmpty, AIEngine.available {
+        if out.isEmpty, AIEngine.available, !mode.isTranslation, mode != .grammarOnly, !Task.isCancelled {
             let firm = instruction + "\nThe output MUST be different from the input. Output ONLY the rewritten text."
             if let c = await AIEngine.run(firm, "TEXT:\n<<<\n\(text)\n>>>", temperature: 0.5).map(clean), !unchanged(c) { out.append(c) }
         }
@@ -117,8 +137,18 @@ enum Rewriter {
         if mode == .grammarOnly || mode == .improve || mode == .professional || mode == .formal {
             out = out.map { v in offline(v, mode: .grammarOnly) ?? v }
         }
-        if out.isEmpty, let rule = offline(text, mode: mode) { out.append(rule) }
-        return out.filter { !$0.isEmpty }
+        if Task.isCancelled { return [] }
+        if out.isEmpty, custom == nil, mode.worksOffline, let rule = offline(text, mode: mode) { out.append(rule) }
+        return out.filter { !$0.isEmpty && (!mode.isTranslation || translationPreservesDetails(text, $0)) }
+    }
+
+    /// A translation must not silently change an amount, order number, date, URL or email address.
+    static func translationPreservesDetails(_ source: String, _ result: String) -> Bool {
+        let details: (String) -> [String] = { text in
+            TextUtil.matches("https?://[^\\s<>]+|[\\w.+-]+@[\\w.-]+\\.[A-Za-z]{2,}|[0-9]+", in: text)
+                .map { TextUtil.substring(text, $0.range) }
+        }
+        return details(source) == details(result)
     }
 
     static func clean(_ s: String) -> String {
@@ -127,6 +157,7 @@ enum Rewriter {
 
     /// Rule-based fallback: applies every grammar fix, and for some modes, the matching style fixes.
     static func offline(_ text: String, mode: RewriteMode) -> String? {
+        guard mode.worksOffline else { return nil }
         var o = CheckOptions.from(Store.shared.prefs, goals: Store.shared.prefs.defaultGoals)
         o.consistency = false
         let issues = RuleEngine.check(text, options: o).filter { i in
@@ -168,7 +199,7 @@ enum TextBrainLite {
 final class RewriteAnywhere {
     static let shared = RewriteAnywhere()
     private var panel: NSPanel?
-    private var source: (app: NSRunningApplication, element: AXUIElement?, range: NSRange?, text: String)?
+    private var source: (app: NSRunningApplication, element: AXUIElement?, range: NSRange?, text: String, snapshot: String?)?
     private var hotKeyRef: EventHotKeyRef?
     private let button = SelectionButton()
     private var timer: Timer?
@@ -228,22 +259,29 @@ final class RewriteAnywhere {
         button.orderOut(nil)
         guard let app = NSWorkspace.shared.frontmostApplication, app.bundleIdentifier != Bundle.main.bundleIdentifier else { return }
         Task {
+            for _ in 0..<30 {
+                if CGEventSource.flagsState(.combinedSessionState).intersection([.maskControl, .maskAlternate, .maskCommand, .maskShift]).isEmpty { break }
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+            guard NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier else { return }
             // Prefer reading the selection directly (keeps the clipboard untouched); fall back to ⌘C.
             let ax = AXUIElementCreateApplication(app.processIdentifier)
             var element: AXUIElement?
             var range: NSRange?
             var text: String?
+            var snapshot: String?
             if AXIsProcessTrusted(), let el = FocusedEditor.resolve(app: ax, pid: app.processIdentifier, bundleID: app.bundleIdentifier ?? ""),
                let r = AccessibilityEdit.selection(el), r.length > 0, let full = FocusedEditor.string(el, kAXValueAttribute),
                let rr = Range(r, in: full) {
                 element = el; range = r; text = String(full[rr])
+                snapshot = full
             }
             if text == nil { text = await QuickCheck.shared.copySelectionPublic() }
             guard let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 QuickCheck.shared.show(text: "", canReplace: false, note: "Highlight some text in any app, then press ⌃⌥R to rewrite it.")
                 return
             }
-            source = (app, element, range, text)
+            source = (app, element, range, text, snapshot)
             show(text)
         }
     }
@@ -286,7 +324,7 @@ final class RewriteAnywhere {
                 return
             }
             if let el = src.element, let range = src.range, let full = FocusedEditor.string(el, kAXValueAttribute),
-               TextUtil.substring(full, range) == src.text {
+               full == src.snapshot, TextUtil.substring(full, range) == src.text {
                 if await AccessibilityEdit.apply(editor: el, appPID: src.app.processIdentifier, bundleID: src.app.bundleIdentifier ?? "",
                                                  snapshot: full, range: range, original: src.text, replacement: new) {
                     Store.shared.stats.rewrites += 1
@@ -298,8 +336,7 @@ final class RewriteAnywhere {
                     return
                 }
             }
-            QuickCheck.shared.pastePublic(new)
-            Store.shared.stats.rewrites += 1
+            copyWithNotice(new, "The original selection could not be verified. The rewrite is on your clipboard; select where it belongs and press ⌘V.")
         }
     }
 }
@@ -367,15 +404,23 @@ struct RewritePanelView: View {
     @VState private var showMore = false
     @VState private var edited = ""
     @VState private var copied = false
+    @ObservedObject private var store = Store.shared
+    @VState private var configuring = false
+    @VState private var rewriteTask: Task<Void, Never>?
+    @VState private var lastCustom: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Rewrite").font(.title3.bold())
+            HStack {
+                Text("Quick Actions").font(.title3.bold())
+                Spacer()
+                Button("Customize…") { configuring = true }.disabled(working)
+            }
             Text(original).font(.callout).foregroundStyle(.secondary).lineLimit(4)
                 .padding(10).frame(maxWidth: .infinity, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)))
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 132))], spacing: 6) {
-                ForEach(showMore ? RewriteMode.allCases : RewriteMode.primary) { m in
+                ForEach(Array((showMore ? RewriteMode.allCases : RewriteMode.normalized(store.prefs.quickActions)).enumerated()), id: \.offset) { _, m in
                     Button { go(m) } label: {
                         Label(m.label, systemImage: m.icon).frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -391,12 +436,14 @@ struct RewritePanelView: View {
             }
             HStack {
                 TextField("Or describe it: “make it sound like a thank-you note”", text: $custom)
-                    .textFieldStyle(.roundedBorder).onSubmit { go(.improve, custom: custom) }
+                    .textFieldStyle(.roundedBorder).onSubmit { if !custom.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { go(.improve, custom: custom) } }
+                    .accessibilityLabel("Custom rewrite instruction")
                 Button("Rewrite") { go(.improve, custom: custom) }.disabled(custom.isEmpty || working || !aiAvailable)
             }
             Divider()
             if working {
                 HStack { ProgressView().controlSize(.small); Text("Writing on your Mac…").foregroundStyle(.secondary) }
+                Button("Cancel generation") { rewriteTask?.cancel(); working = false; mode = nil }
             } else if !versions.isEmpty {
                 if versions.count > 1 {
                     Picker("", selection: $selected) {
@@ -412,34 +459,69 @@ struct RewritePanelView: View {
                 HStack {
                     Text("\(TextUtil.wordCount(original)) → \(TextUtil.wordCount(edited)) words").font(.caption).foregroundStyle(.secondary)
                     Spacer()
-                    Button("Try again") { if let mode { go(mode, custom: custom.isEmpty ? nil : custom) } }
+                    Button("Try again") { if let mode { go(mode, custom: lastCustom, varied: true) } }
                     Button(copied ? "Copied" : "Copy") { copy(edited); copied = true }
                     Button("Replace") { replace(edited) }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                        .disabled(edited.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             } else if mode != nil {
-                Text("No changes needed — this already reads well.").foregroundStyle(.secondary)
+                Text(mode?.isTranslation == true ? "No safe translation was returned. The model may be unavailable, the text may already be in that language, or numeric details / links changed. Try a shorter selection." : "No alternative was returned. The text may already be correct, or the local model could not complete the request.").foregroundStyle(.secondary)
             } else {
-                Text("Pick a style above. You'll get up to three versions to choose from.").font(.callout).foregroundStyle(.secondary)
+                Text("Choose an action. Preview and edit the result before replacing your selection. ‘Try again’ generates another version.").font(.callout).foregroundStyle(.secondary)
             }
+            if original.utf16.count > 6000 { Text("Select at most 6,000 characters for a rewrite or translation.").foregroundStyle(.orange) }
             Spacer(minLength: 0)
         }
         .padding(18)
         .frame(minWidth: 560, minHeight: 480)
         .onExitCommand(perform: close)
+        .onDisappear { rewriteTask?.cancel() }
+        .sheet(isPresented: $configuring) { QuickActionsSettings(store: store) }
     }
 
-    private func go(_ m: RewriteMode, custom: String? = nil) {
+    private func go(_ m: RewriteMode, custom: String? = nil, varied: Bool = false) {
+        guard !working, original.utf16.count <= 6000, aiAvailable || (m.worksOffline && custom == nil) else { return }
         mode = m
+        lastCustom = custom
         working = true
         versions = []
         copied = false
-        Task {
-            let v = await Rewriter.versions(of: original, mode: m, custom: custom?.isEmpty == false ? custom : nil)
+        rewriteTask = Task {
+            let v = await Rewriter.versions(of: original, mode: m, custom: custom?.isEmpty == false ? custom : nil, count: 1, varied: varied)
+            guard !Task.isCancelled else { return }
             versions = v
             selected = 0
             edited = v.first ?? ""
             working = false
         }
+    }
+}
+
+struct QuickActionsSettings: View {
+    @ObservedObject var store: Store
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Your seven Quick Actions").font(.headline)
+            Text("Choose what each button does. Changes are saved on this Mac.").foregroundStyle(.secondary)
+            ForEach(0..<7, id: \.self) { slot in
+                Picker("Action \(slot + 1)", selection: Binding(get: {
+                    RewriteMode.normalized(store.prefs.quickActions)[slot]
+                }, set: { value in
+                    var actions = RewriteMode.normalized(store.prefs.quickActions)
+                    actions[slot] = value
+                    store.prefs.quickActions = actions
+                })) {
+                    ForEach(RewriteMode.allCases) { Text($0.label).tag($0) }
+                }
+            }
+            HStack {
+                Button("Restore defaults") { store.prefs.quickActions = RewriteMode.primary }
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+        }.padding(24).frame(width: 440)
     }
 }
 

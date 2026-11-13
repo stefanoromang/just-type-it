@@ -170,19 +170,25 @@ public sealed class MainWindow : Form
     async void RewriteSelection()
     {
         var src = editor.SelectionLength > 0 ? editor.SelectedText : editor.Text;
+        var full = editor.Text;
+        int start = editor.SelectionLength > 0 ? editor.SelectionStart : 0;
+        int length = src.Length;
         if (src.Trim().Length == 0) return;
         var menu = new ContextMenuStrip();
-        foreach (var m in Enum.GetValues<RewriteMode>())
+        foreach (var m in RewriteModes.Normalize(Store.Shared.Prefs.QuickActions))
         {
             var mode = m;
             menu.Items.Add(m.Label(), null, async (_, _) =>
             {
                 var v = await Rewriter.Versions(src.Replace("\r\n", "\n"), mode, count: 1, options: Store.Shared.Options());
                 if (v.Count == 0) { MessageBox.Show(mode.WorksOffline() ? "No changes needed." : "This style needs a local AI model (install Ollama).", "Just Type It"); return; }
-                if (editor.SelectionLength == 0) editor.SelectAll();
+                if (editor.Text != full) { Clipboard.SetText(v[0]); MessageBox.Show("The draft changed. The result is on your clipboard instead.", "Just Type It"); return; }
+                editor.Select(start, length);
                 editor.SelectedText = v[0];
             });
         }
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Customize seven Quick Actions…", null, (_, _) => RewriteWindow.Configure(this));
         menu.Show(Cursor.Position);
         await Task.CompletedTask;
     }

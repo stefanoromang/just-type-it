@@ -2,6 +2,8 @@
 // MIT License · https://github.com/stefanoromang/just-type-it
 
 using System.Runtime.InteropServices;
+using System.Windows.Automation;
+using System.Windows.Automation.Text;
 
 namespace JustTypeIt;
 
@@ -11,6 +13,15 @@ static class InputHelper
     [DllImport("user32.dll")] static extern short GetAsyncKeyState(int vKey);
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+    [DllImport("user32.dll")] static extern uint GetClipboardSequenceNumber();
+    [DllImport("user32.dll")] static extern bool GetLastInputInfo(ref LastInputInfo info);
+    [StructLayout(LayoutKind.Sequential)] struct LastInputInfo { public uint Size; public uint Tick; }
+
+    public static bool InputIsIdle()
+    {
+        var info = new LastInputInfo { Size = (uint)Marshal.SizeOf<LastInputInfo>() };
+        return GetLastInputInfo(ref info) && unchecked((uint)Environment.TickCount - info.Tick) >= 600;
+    }
 
     const int VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12, VK_LWIN = 0x5B, VK_RWIN = 0x5C;
 
@@ -64,9 +75,12 @@ static class InputHelper
     /// Copies the current selection in the foreground app and restores the clipboard. Empty if nothing is selected.
     public static async Task<string> CopySelection(Keys hotkeyLetter)
     {
-        await WaitForKeysReleased(hotkeyLetter);
+        var source = GetForegroundWindow();
+        if (!await WaitForKeysReleased(hotkeyLetter) || GetForegroundWindow() != source) return "";
+        if (CaptureSelection() is { } selection) return selection.Selected;
         var saved = SaveClipboard();
-        try { Clipboard.Clear(); } catch { }
+        try { Clipboard.Clear(); } catch { return ""; }
+        var cleared = GetClipboardSequenceNumber();
         SendKeys.SendWait("^c");
         string text = "";
         for (int i = 0; i < 40 && text.Length == 0; i++)
@@ -74,26 +88,62 @@ static class InputHelper
             await Task.Delay(25);
             try { if (Clipboard.ContainsText()) text = Clipboard.GetText(); } catch { }
         }
-        RestoreClipboard(saved);
+        // No delayed restoration: a later clipboard change may belong to the user.
+        if (text.Length > 0 || GetClipboardSequenceNumber() == cleared) RestoreClipboard(saved);
         return text;
     }
 
     /// Pastes text over the current selection, waits until the app has read it, then restores the clipboard.
     /// `verify` (optional) returns true once the paste is visible in the target; the clipboard is restored
     /// only after that (or a timeout), so a slow app never pastes the user's old clipboard.
-    public static async Task Paste(string text, Func<Task<bool>>? verify = null, bool restore = true)
+    public static async Task Paste(string text, Func<Task<bool>>? verify = null, bool restore = true, Func<bool>? canPaste = null)
     {
+        var source = GetForegroundWindow();
+        if (!await WaitForKeysReleased() || GetForegroundWindow() != source || canPaste?.Invoke() == false) return;
         var saved = restore ? SaveClipboard() : null;
+        uint? owned = null;
         try
         {
             if (text.Length == 0) SendKeys.SendWait("{DEL}");
-            else { Clipboard.SetText(text.Replace("\r\n", "\n").Replace("\n", "\r\n")); SendKeys.SendWait("^v"); }
+            else { Clipboard.SetText(text.Replace("\r\n", "\n").Replace("\n", "\r\n")); owned = GetClipboardSequenceNumber(); SendKeys.SendWait("^v"); }
         }
         catch { }
         if (verify != null)
             for (int i = 0; i < 30 && !await verify(); i++) await Task.Delay(50);
         else
             await Task.Delay(700);
-        if (restore) RestoreClipboard(saved);
+        if (restore && owned == GetClipboardSequenceNumber()) RestoreClipboard(saved);
+    }
+
+    /// Keeps the exact field, complete text and highlighted range, not just an app/window handle.
+    internal sealed record SelectionSnapshot(AutomationElement Element, string Full, TextPatternRange Range, string Selected);
+
+    public static SelectionSnapshot? CaptureSelection()
+    {
+        try
+        {
+            var el = AutomationElement.FocusedElement;
+            if (el == null || el.Current.IsPassword || !el.TryGetCurrentPattern(TextPattern.Pattern, out var pattern)) return null;
+            var tp = (TextPattern)pattern;
+            var ranges = tp.GetSelection();
+            if (ranges.Length != 1) return null;
+            var selected = ranges[0].GetText(-1);
+            return selected.Length == 0 ? null : new(el, tp.DocumentRange.GetText(-1), ranges[0].Clone(), selected);
+        }
+        catch { return null; }
+    }
+
+    public static bool MatchesSelection(SelectionSnapshot? snapshot)
+    {
+        if (snapshot == null) return false;
+        try
+        {
+            var now = CaptureSelection();
+            return now != null && ForegroundProcessId() == (uint)snapshot.Element.Current.ProcessId
+                && Automation.Compare(now.Element, snapshot.Element) && now.Full == snapshot.Full && now.Selected == snapshot.Selected
+                && now.Range.CompareEndpoints(TextPatternRangeEndpoint.Start, snapshot.Range, TextPatternRangeEndpoint.Start) == 0
+                && now.Range.CompareEndpoints(TextPatternRangeEndpoint.End, snapshot.Range, TextPatternRangeEndpoint.End) == 0;
+        }
+        catch { return false; }
     }
 }

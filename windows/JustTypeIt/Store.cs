@@ -9,6 +9,7 @@ public sealed class Prefs
 {
     public Dialect Dialect { get; set; } = Dialect.American;
     public List<string> Languages { get; set; } = new(JustTypeIt.Languages.Defaults);
+    public List<RewriteMode> QuickActions { get; set; } = new(RewriteModes.Primary);
     public Goals DefaultGoals { get; set; } = new();
     public List<string> Dictionary { get; set; } = new();
     public List<StyleRule> StyleRules { get; set; } = new();
@@ -43,10 +44,20 @@ public sealed class Store
             Directory.CreateDirectory(Dir);
             var p = Path.Combine(Dir, "prefs.json");
             if (File.Exists(p)) Prefs = JsonSerializer.Deserialize<Prefs>(File.ReadAllText(p)) ?? new();
+            Prefs.Languages = (Prefs.Languages ?? new()).Where(code => Languages.All.Any(l => l.Code == code)).Distinct().ToList();
+            if (Prefs.Languages.Count == 0) Prefs.Languages = new(Languages.Defaults);
+            Prefs.QuickActions = RewriteModes.Normalize(Prefs.QuickActions).ToList();
             var d = Path.Combine(Dir, "draft.txt");
             DraftText = File.Exists(d) ? File.ReadAllText(d) : Welcome;
         }
-        catch { Prefs = new(); DraftText = Welcome; }
+        catch
+        {
+            // Do not discard a readable draft just because preferences could not be decoded.
+            Prefs = new();
+            var draft = Path.Combine(Dir, "draft.txt");
+            try { DraftText = File.Exists(draft) ? File.ReadAllText(draft) : Welcome; }
+            catch { DraftText = Welcome; }
+        }
     }
 
     public const string Welcome =

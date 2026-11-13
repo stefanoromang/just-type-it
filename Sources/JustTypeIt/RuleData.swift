@@ -123,7 +123,7 @@ enum RuleData {
         PatternRule(pattern: "\\bdepend(s|ed|ing)? of\\b", replacement: "depend$1 on",
                     group: .correctness, kind: "Grammar/Preposition", title: "Preposition",
                     explanation: "The idiom is “depend on”."),
-        PatternRule(pattern: "\\b(interested|good|bad) on\\b", replacement: "$1 in",
+        PatternRule(pattern: "\\b(interested) on\\b", replacement: "$1 in",
                     group: .correctness, kind: "Grammar/Preposition", title: "Preposition",
                     explanation: "Use “in” with this adjective."),
         PatternRule(pattern: "\\bmarried with\\b", replacement: "married to",

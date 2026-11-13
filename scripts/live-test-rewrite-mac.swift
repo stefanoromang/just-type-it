@@ -18,7 +18,12 @@ func jtiWindows() -> [[String: Any]] {
 }
 
 var results: [(String, Bool, String)] = []
-let original = "hey so i think maybe we should move the meeting to thursday because alot of people cant make it on tuesday"
+let translation = CommandLine.arguments.contains("--spanish") || CommandLine.arguments.contains("--english")
+let original = CommandLine.arguments.contains("--english")
+    ? "Por favor, envía el pedido A729 de 24 cajas antes del viernes."
+    : translation ? "Please send order A729 for 24 boxes by Friday."
+    : "Hey, I think maybe we should move the meeting to Thursday because many people cannot make it on Tuesday."
+let action = CommandLine.arguments.contains("--spanish") ? "Translate to Spanish" : CommandLine.arguments.contains("--english") ? "Translate to English" : "More professional"
 NSAppleScript(source: "tell application \"TextEdit\"\nactivate\nmake new document with properties {text:\"\(original)\"}\nend tell")?.executeAndReturnError(nil)
 sleep(2)
 let te = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.TextEdit").first!
@@ -34,18 +39,22 @@ sleep(2)
 let button = jtiWindows().contains { ($0[kCGWindowBounds as String] as? [String: CGFloat])?["Width"] == 30 }
 results.append(("✨ rewrite button appears next to highlighted text", button, ""))
 
+guard NSWorkspace.shared.frontmostApplication?.processIdentifier == te.processIdentifier else { print("INCONCLUSIVE: TextEdit lost focus before the shortcut."); exit(2) }
 // 2. ⌃⌥R opens the rewrite panel
 key(15, [.maskControl, .maskAlternate])
 sleep(2)
 let jax = AXUIElementCreateApplication(jti().processIdentifier)
 let panel = (attr(jax, kAXWindowsAttribute) as? [AXUIElement] ?? []).first { str($0, kAXTitleAttribute).contains("Rewrite") }
+if panel == nil && NSWorkspace.shared.frontmostApplication?.processIdentifier != te.processIdentifier {
+    print("INCONCLUSIVE: another app took focus while opening Rewrite."); exit(2)
+}
 results.append(("⌃⌥R opens the Rewrite panel", panel != nil, ""))
 guard let panel else { finish() }
-let shows = find(panel, { str($0, kAXValueAttribute).hasPrefix("hey so i think") || str($0, kAXDescriptionAttribute).hasPrefix("hey so i think") }) != nil
+let shows = find(panel, { str($0, kAXValueAttribute).hasPrefix(String(original.prefix(15))) || str($0, kAXDescriptionAttribute).hasPrefix(String(original.prefix(15))) }) != nil
 results.append(("Panel shows the highlighted text", shows, ""))
 
 // 3. Pick "More professional"
-if let pro = find(panel, { str($0, kAXRoleAttribute) == "AXButton" && (str($0, kAXTitleAttribute) + str($0, kAXDescriptionAttribute)).contains("More professional") }) {
+if let pro = find(panel, { str($0, kAXRoleAttribute) == "AXButton" && (str($0, kAXTitleAttribute) + str($0, kAXDescriptionAttribute)).contains(action) }) {
     AXUIElementPerformAction(pro, kAXPressAction as CFString)
 }
 var replaceButton: AXUIElement?
@@ -54,16 +63,22 @@ for _ in 0..<30 {
     replaceButton = find(panel, { str($0, kAXRoleAttribute) == "AXButton" && (str($0, kAXTitleAttribute) + str($0, kAXDescriptionAttribute)) == "Replace" })
     if replaceButton != nil { break }
 }
-let versionsShown = find(panel, { (str($0, kAXTitleAttribute) + str($0, kAXDescriptionAttribute) + str($0, kAXValueAttribute)).contains("Version 2") }) != nil
-results.append(("Professional rewrite produced", replaceButton != nil, ""))
-results.append(("Several versions to choose from", versionsShown, ""))
+let versionsShown = find(panel, { (str($0, kAXTitleAttribute) + str($0, kAXDescriptionAttribute)) == "Try again" }) != nil
+results.append(("\(action) result produced", replaceButton != nil, ""))
+let customize = find(panel, { (str($0, kAXTitleAttribute) + str($0, kAXDescriptionAttribute)) == "Customize…" }) != nil
+results.append(("Quick Actions customization available", customize, ""))
+results.append(("Another version available on demand", versionsShown, ""))
 
 // 4. Replace puts it back in TextEdit
-if let replaceButton { AXUIElementPerformAction(replaceButton, kAXPressAction as CFString) }
+if let replaceButton {
+    jti().activate(); usleep(200_000)
+    guard NSWorkspace.shared.frontmostApplication?.processIdentifier == jti().processIdentifier else { print("INCONCLUSIVE: Rewrite lost focus before Replace."); exit(2) }
+    AXUIElementPerformAction(replaceButton, kAXPressAction as CFString)
+}
 sleep(3)
 let after = str(ta, kAXValueAttribute)
-results.append(("Replace puts the rewrite into TextEdit", after != original && !after.isEmpty && after.lowercased().contains("thursday"), after))
-results.append(("Original casual text is gone", !after.contains("alot") && !after.hasPrefix("hey so i"), ""))
+results.append(("Replace puts the result into TextEdit", after != original && !after.isEmpty && (translation ? after.contains("A729") && after.contains("24") : after.lowercased().contains("thursday")), after))
+results.append(("Original selection is replaced", after != original && !after.hasPrefix("Hey, I think maybe"), ""))
 finish()
 
 func finish() -> Never {

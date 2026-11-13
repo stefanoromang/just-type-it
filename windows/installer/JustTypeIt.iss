@@ -4,7 +4,7 @@
 
 #define AppName "Just Type It"
 #ifndef AppVersion
-  #define AppVersion "1.5.0"
+  #define AppVersion "1.6.0"
 #endif
 #define AppPublisher "Stefano Roman Gunness"
 #define AppURL "https://github.com/stefanoromang/just-type-it"

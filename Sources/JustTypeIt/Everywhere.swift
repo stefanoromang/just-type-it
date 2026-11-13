@@ -34,6 +34,8 @@ final class Everywhere: ObservableObject {
     private var aiIssues: [Issue] = []
     private var aiTask: Task<Void, Never>?
     private var aiCheckedParagraphs: [String: [Issue]] = [:]
+    private var lastAIRequest = ""
+    private var checkSettings = ""
     private var layoutSignature = ""
     @Published private(set) var aiWorking = false
     @Published var pausedUntil: Date?
@@ -134,6 +136,15 @@ final class Everywhere: ObservableObject {
             return
         }
         let prefs = Store.shared.prefs
+        let settings = "\(prefs.languages)|\(prefs.dialect)|\(prefs.dictionary)|\(prefs.aiEverywhere)|\(prefs.checkPassive)|\(prefs.checkHedging)|\(prefs.checkInclusive)|\(prefs.defaultGoals)|\(prefs.brandTone)|\(prefs.styleRules)"
+        if settings != checkSettings {
+            checkSettings = settings
+            checkedText = nil
+            lastAIRequest = ""
+            aiCheckedParagraphs.removeAll()
+            aiIssues = []
+            aiTask?.cancel()
+        }
         if Everywhere.defaultExcluded.contains(bid) || prefs.excludedApps.contains(bid) { hideAll(); currentApp = app.localizedName ?? ""; return }
         let axApp = AXUIElementCreateApplication(app.processIdentifier)
         if !enhancedPIDs.contains(app.processIdentifier) {
@@ -157,6 +168,7 @@ final class Everywhere: ObservableObject {
             aiIssues = []
             autocorrected = []
             aiTask?.cancel()
+            lastAIRequest = ""
             card.orderOut(nil)
         }
         guard let full = string(el, kAXValueAttribute) else { hideAll(); return }
@@ -168,7 +180,7 @@ final class Everywhere: ObservableObject {
             if grew, Store.shared.prefs.autocorrect { autocorrectRecent(full, in: el) }
         }
         // Check after a short pause in typing; AI looks at the current paragraph after a longer pause.
-        if checkedText != full, Date().timeIntervalSince(lastEdit) > 0.45 {
+        if checkedText != full, Date().timeIntervalSince(lastEdit) > 0.20 {
             runCheck(full, element: el)
             scheduleAI(full, element: el)
         }
@@ -232,8 +244,10 @@ final class Everywhere: ObservableObject {
 
     /// Runs Apple Intelligence on the paragraph around the cursor (and caches each paragraph's result).
     private func scheduleAI(_ full: String, element el: AXUIElement) {
+        guard full != lastAIRequest else { return }
         aiTask?.cancel()
         guard Store.shared.prefs.aiEverywhere, AIEngine.available, TextUtil.wordCount(full) >= 4 else { return }
+        lastAIRequest = full
         let caret = selectedRange(el)?.location ?? (full as NSString).length
         aiTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 1_800_000_000)
@@ -255,14 +269,15 @@ final class Everywhere: ObservableObject {
                         var j = i; j.range.location -= p.range.location; return j
                     }
                     local = await AIEngine.deepCheck(p.text, goals: self.goalsForApp(), dialect: Store.shared.prefs.dialect, brand: Store.shared.prefs.brandTone, existing: rules)
+                    if Task.isCancelled { return }
                     self.aiCheckedParagraphs[p.text] = local
                     if self.aiCheckedParagraphs.count > 300 { self.aiCheckedParagraphs.removeAll() }
                 }
                 found += local.map { var i = $0; i.range.location += p.range.location; return i }
             }
-            guard self.lastText == full else { return }
+            guard !Task.isCancelled, self.running, self.lastText == full, let current = self.element, CFEqual(current, el) else { return }
             self.aiIssues = found
-            self.checkedText = nil
+            self.runCheck(full, element: el)
         }
     }
 
@@ -507,7 +522,7 @@ final class Everywhere: ObservableObject {
         pendingAutocorrect?.cancel()
         // Wait for a short pause in typing so a correction never lands in the middle of a keystroke.
         pendingAutocorrect = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 450_000_000)
+            try? await Task.sleep(nanoseconds: 700_000_000)
             guard let self, !Task.isCancelled, !self.applyingCorrection, self.lastText == full, self.string(el, kAXValueAttribute) == full,
                   self.selectedRange(el)?.location == caret else { return }
             // Apply every finished typo from the end backwards so earlier offsets stay valid.
@@ -527,7 +542,7 @@ final class Everywhere: ObservableObject {
         applyingCorrection = true
         defer { applyingCorrection = false }
         let ok = await AccessibilityEdit.apply(editor: el, appPID: pid, bundleID: bundleID, snapshot: snapshot,
-                                                range: fix.range, original: fix.original, replacement: fix.replacement)
+                                                range: fix.range, original: fix.original, replacement: fix.replacement, automatic: true)
         // Remember failures too (by position and word) so a field that can't be edited isn't retried forever;
         // a different word typed at the same spot still gets corrected.
         autocorrected.insert(attemptKey(fix))

@@ -13,6 +13,7 @@ enum GrammarRules {
     static let all: [PatternRule] = verbForms + agreement + comparatives + nouns + idioms
 
     static let verbForms: [PatternRule] = [
+        r("\\b(did|does|do) good(?= (?:on|in|at) (?:the |an? |my |your |his |her |our |their )?(?:exam|test|assessment|interview|assignment|project|job|presentation|task)\\b)", "$1 well", "Grammar/AdverbAdjective", "Adjective vs. adverb", "For performance, use “well”: “did well on the exam”. “Did good” can also mean helped others, so it is not always an error."),
         r("\\b(I|you|we|they|he|she|it) seen\\b", "$1 saw", "Grammar/VerbForm", "Verb form",
           "“Seen” needs a helper verb (have seen). On its own, use the past tense “saw”."),
         r("\\b(has|have|had) (went|ate|wrote|took|gave|ran|began|drank|sang|swam|came|did|saw|spoke|broke|chose|drove|flew|forgot|froze|grew|knew|rode|rose|shook|stole|threw|woke|wore)\\b", "$1 PP:$2",
@@ -100,7 +101,7 @@ enum GrammarRules {
           "Grammar/Comparative", "Double comparative", "Don't use “more” with an -er adjective. Say “taller”, not “more taller”."),
         r("\\b(most) ((?:easi|bigg|small|larg|great|high|low|fast|slow|strong|weak|old|young|new|long|short|hard|cheap|rich|poor|nic|safe|clos|lat|earli|happi|busi|funni|pretti|tini|heavi|light|bright|dark|clean|clear|cool|warm|cold|hott|quick|smart|tall)est)\\b", "the $2", "Grammar/Comparative", "Double superlative", "Don't use “most” with an -est adjective. Say “the easiest”, not “the most easiest”."),
         r("\\bthe most (best|worst)\\b", "the $1", "Grammar/Comparative", "Double superlative", "“Best” and “worst” are already superlatives."),
-        r("\\b(plays|play|played|did|does|do|sings|sang|works|worked|speaks|spoke|writes|wrote|runs|ran|went|goes|performed|performs|cooks|cooked|dances|danced|drives|drove) (\\w+ ){0,2}(very |really |so )?good\\b(?<!\\bgoes good|\\bwent good)", "",
+        r("\\b(plays|play|played|sings|sang|works|worked|speaks|spoke|writes|wrote|runs|ran|went|goes|performed|performs|cooks|cooked|dances|danced|drives|drove) (\\w+ ){0,2}(very |really |so )?good\\b(?<!\\bgoes good|\\bwent good)", "",
           "Grammar/AdverbAdjective", "Adjective vs. adverb", "To describe how someone does something, use the adverb “well”, not “good”."),
         r("\\b(feel|feels|felt) badly\\b", "$1 bad", "Grammar/AdverbAdjective", "Adjective vs. adverb", "After linking verbs like “feel”, use the adjective: “I feel bad”."),
         r("\\b(less) (friends|people|items|cars|books|mistakes|errors|calories|words|hours|days|students|employees|problems|questions|options|emails|meetings|customers|things|cases|issues|bugs|steps)\\b", "fewer $2",

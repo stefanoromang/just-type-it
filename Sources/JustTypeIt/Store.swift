@@ -38,6 +38,7 @@ final class Store: ObservableObject {
 
     private let dir: URL
     private var saveTask: Task<Void, Never>?
+    private var canSaveDocuments = true
 
     init() {
         dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("JustTypeIt")
@@ -50,7 +51,8 @@ final class Store: ObservableObject {
             } else {
                 // Never lose documents: keep the unreadable file as a backup before anything is saved.
                 let backup = dir.appendingPathComponent("documents-backup-\(Int(Date().timeIntervalSince1970)).json")
-                try? FileManager.default.copyItem(at: docsURL, to: backup)
+                do { try FileManager.default.copyItem(at: docsURL, to: backup) }
+                catch { canSaveDocuments = false }
             }
         }
         if let d = try? Data(contentsOf: dir.appendingPathComponent("stats.json")), let s = try? JSONDecoder().decode(Stats.self, from: d) { stats = s }
@@ -74,6 +76,7 @@ final class Store: ObservableObject {
     }
 
     private func scheduleDocSave() {
+        guard canSaveDocuments else { return }
         saveTask?.cancel()
         let docs = documents
         let url = dir.appendingPathComponent("documents.json")
@@ -85,6 +88,7 @@ final class Store: ObservableObject {
     }
 
     func saveNow() {
+        guard canSaveDocuments else { return }
         if let d = try? JSONEncoder().encode(documents) { try? d.write(to: dir.appendingPathComponent("documents.json"), options: .atomic) }
     }
 

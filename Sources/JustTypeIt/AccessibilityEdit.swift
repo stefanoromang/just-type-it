@@ -26,7 +26,19 @@ enum AccessibilityEdit {
     }
 
     static func apply(editor: AXUIElement, appPID: pid_t, bundleID: String,
-                      snapshot: String, range: NSRange, original: String, replacement: String) async -> Bool {
+                      snapshot: String, range: NSRange, original: String, replacement: String, automatic: Bool = false) async -> Bool {
+        let keyboardIdle = { !automatic || CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .keyDown) >= 0.6 }
+        guard keyboardIdle(), !Task.isCancelled else { return false }
+        let originalSelection = selection(editor)
+        var changed = false
+        defer {
+            // An aborted background edit must not leave an old word selected while the user types.
+            if !changed, let originalSelection, selection(editor) == range,
+               FocusedEditor.string(editor, kAXValueAttribute) == snapshot {
+                var saved = CFRange(location: originalSelection.location, length: originalSelection.length)
+                if let value = AXValueCreate(.cfRange, &saved) { AXUIElementSetAttributeValue(editor, kAXSelectedTextRangeAttribute as CFString, value) }
+            }
+        }
         let debug = ProcessInfo.processInfo.environment["JTI_EDIT_DEBUG"] == "1"
         if debug { print("edit: target active", targetIsActive(editor, pid: appPID, bundleID: bundleID)) }
         guard let expected = expectedText(snapshot, range: range, original: original, replacement: replacement),
@@ -45,7 +57,7 @@ enum AccessibilityEdit {
             try? await Task.sleep(nanoseconds: 30_000_000)
         }
         if debug { print("edit: selected", selection(editor) == range, "target active", targetIsActive(editor, pid: appPID, bundleID: bundleID)) }
-        guard selection(editor) == range, targetIsActive(editor, pid: appPID, bundleID: bundleID),
+        guard keyboardIdle(), selection(editor) == range, targetIsActive(editor, pid: appPID, bundleID: bundleID),
               FocusedEditor.string(editor, kAXValueAttribute) == snapshot else { return false }
         if bundleID == FocusedEditor.outlookID { try? await Task.sleep(nanoseconds: 100_000_000) }
 
@@ -56,12 +68,12 @@ enum AccessibilityEdit {
             AXUIElementSetAttributeValue(editor, kAXSelectedTextAttribute as CFString, replacement as CFString)
             for _ in 0..<5 {
                 let after = FocusedEditor.string(editor, kAXValueAttribute)
-                if after == expected { return true }
-                if after != snapshot { return false }
+                if after == expected { changed = true; return true }
+                if after != snapshot { changed = true; return false }
                 try? await Task.sleep(nanoseconds: 30_000_000)
             }
         }
-        guard !Task.isCancelled, selection(editor) == range,
+        guard !Task.isCancelled, keyboardIdle(), selection(editor) == range,
               targetIsActive(editor, pid: appPID, bundleID: bundleID),
               FocusedEditor.string(editor, kAXValueAttribute) == snapshot else { return false }
         if debug { print("edit: posting paste", CGPreflightPostEventAccess()) }
@@ -96,8 +108,8 @@ enum AccessibilityEdit {
         for _ in 0..<15 {
             try? await Task.sleep(nanoseconds: 40_000_000)
             let after = FocusedEditor.string(editor, kAXValueAttribute)
-            if after == expected { return true }
-            if after != snapshot { return false }
+            if after == expected { changed = true; return true }
+            if after != snapshot { changed = true; return false }
         }
         if debug { print("edit: timed out") }
         return false
