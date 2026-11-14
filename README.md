@@ -20,6 +20,14 @@ The checking happens **on your Mac**. It uses Apple's built-in spelling and gram
 
 ## Features
 
+### What's new in 1.6.1 — automatic suggestions where you type
+- **Type directly in your app.** In supported editable fields, Just Type It automatically underlines mistakes. Click an underline to see the suggested correction and accept it in place; no manual copy into Just Type It is needed.
+- **Search fields now work too.** Ordinary search boxes are checked. Passwords, browser address bars and email-recipient fields remain excluded.
+- **Visible across apps and Spaces.** Underline and suggestion windows now explicitly join other applications' window sets, refresh when you change fields, and keep the badge within the visible display. Browser rich-text range bounds use a matching text child when the host returns an empty rectangle.
+- **AI follows the quick checks.** Mac uses Apple Intelligence; Windows now also automatically proofreads the active paragraph with an installed local Ollama model. These AI results arrive after a short pause and must be reviewed. Windows without Ollama still gets offline rule-based checking.
+- **Live verification on Mac:** Word plus Chrome plain-text, search and rich-text fields: automatic underline → click suggestion → accept → only flagged text changes. An AI-only correction in Chrome also passed. See [the cross-app test notes](docs/EVERYWHERE-1.6.1.md).
+- The menu bar reports whether the focused field is being watched, protected/unsupported, or missing Accessibility permission. Keep the app running and **Check in All Apps** enabled. Google Docs canvas editing still needs its accessibility/screen-reader mode; not every app exposes editable text to macOS/Windows.
+
 ### What's new in 1.6 — seven Quick Actions and protected translation
 - **Seven buttons for selected text:** Professional, Enthusiastic, Casual, Shorter, Fix Grammar, Translate to Spanish, and Translate to English. Click **Customize…** to change any slot; your choices are saved. The older styles remain under **More styles…**.
 - **English ↔ Spanish translation** runs locally with Apple Intelligence on Mac or an installed Ollama model on Windows. Results are previews, never automatic edits. Translations that change numeric details, URLs or email addresses are rejected. This protects those details, not the accuracy of every translated word; always review important writing.

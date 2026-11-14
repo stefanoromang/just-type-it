@@ -244,11 +244,7 @@ final class RewriteAnywhere {
     }
 
     private func selectionRect(_ el: AXUIElement, _ range: NSRange) -> NSRect? {
-        var cf = CFRange(location: range.location, length: min(range.length, 2000))
-        guard let v = AXValueCreate(.cfRange, &cf) else { return nil }
-        var out: CFTypeRef?
-        guard AXUIElementCopyParameterizedAttributeValue(el, kAXBoundsForRangeParameterizedAttribute as CFString, v, &out) == .success,
-              let r = Everywhere.axRect(out), r.width > 0 || r.height > 0 else { return nil }
+        guard let r = FocusedEditor.bounds(el, range: NSRange(location: range.location, length: min(range.length, 2000))) else { return nil }
         let h = NSScreen.screens.first?.frame.height ?? 0
         return NSRect(x: r.minX, y: h - r.maxY, width: r.width, height: r.height)
     }

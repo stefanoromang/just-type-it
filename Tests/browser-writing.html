@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Just Type It — local writing test</title>
+<style>
+body { font: 18px system-ui; max-width: 800px; margin: 48px auto; }
+textarea, input, [contenteditable] { display: block; box-sizing: border-box; width: 100%; min-height: 80px; margin: 12px 0 28px; padding: 12px; font: inherit; border: 1px solid #777; }
+</style>
+<h1>Just Type It — local writing test</h1>
+<p>This page sends nothing. Text stays in this local file's tab.</p>
+<label for="plain">Plain text</label>
+<textarea id="plain" spellcheck="false" aria-label="Plain writing test"></textarea>
+<label for="search">Search</label>
+<input id="search" type="search" spellcheck="false" aria-label="Search">
+<label for="rich">Rich text editor</label>
+<div id="rich" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Rich writing test" spellcheck="false">Before. Their going to the store tomorrow. After.</div>
+<label for="secret">Password — must not be checked</label>
+<input id="secret" type="password" aria-label="Password">
+<script>
+const focusField = () => document.getElementById(location.hash.slice(1) || 'plain')?.focus();
+focusField();
+addEventListener('hashchange', focusField);
+</script>
+</html>

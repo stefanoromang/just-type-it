@@ -27,6 +27,8 @@ static class SelfTest
         try
         {
             Record("Shared rules load", RuleData.Shared.Grammar.Count > 90 && RuleData.Shared.SkippedRules == 0, $"{RuleData.Shared.Grammar.Count} rules");
+            Record("Search fields allowed; password/address fields protected", !Everywhere.IsProtectedField("Search Google")
+                && Everywhere.IsProtectedField("Address and search bar") && Everywhere.IsProtectedField("Password") && Everywhere.IsProtectedField("To: recipients"));
             var found = RuleEngine.Check("Their going to the store. He dont care.", new CheckOptions());
             Record("Grammar rules", found.Any(i => i.Replacements.Contains("They're going")) && found.Any(i => i.Replacements.Contains("He doesn't")), string.Join("; ", found));
 

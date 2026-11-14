@@ -265,6 +265,28 @@ public static class Rewriter
         catch { return null; }
     }
 
+    /// Slower AI pass for a short paragraph, after the immediate offline suggestions are visible.
+    public static async Task<List<Issue>> Proofread(string text, CheckOptions options, CancellationToken cancellationToken = default)
+    {
+        var issues = new List<Issue>();
+        if (text.Length > 6000 || cancellationToken.IsCancellationRequested) return issues;
+        foreach (var sentence in TextUtil.Sentences(text).Where(s => TextUtil.WordCount(s.Text) is >= 4 and <= 80).Take(3))
+        {
+            if (cancellationToken.IsCancellationRequested) return new();
+            var language = Languages.Named(Languages.Detect(sentence.Text, options.Languages)).Name;
+            var instruction = $"Proofread this {language} sentence. Fix grammar, spelling and punctuation with the smallest possible edits. Keep the meaning, names, numbers, tone, and the {language} language. Never translate. Do not rewrite correct wording. Return the sentence unchanged if it is already correct.";
+            var corrected = await AskOllama(instruction, sentence.Text, 0, cancellationToken);
+            if (corrected == null || corrected == sentence.Text || !TranslationPreservesDetails(sentence.Text, corrected)) continue;
+            var before = TextUtil.Words(sentence.Text).Select(w => w.Text.ToLowerInvariant()).ToHashSet();
+            var after = TextUtil.Words(corrected).Select(w => w.Text.ToLowerInvariant()).ToHashSet();
+            if (after.Count == 0 || before.Intersect(after).Count() < Math.Max(before.Count, after.Count) * 0.5) continue;
+            issues.Add(new Issue { Start = sentence.Start, Length = sentence.Length, Original = sentence.Text,
+                Replacements = new() { corrected }, Source = IssueSource.AI, Group = IssueGroup.Correctness,
+                Kind = "AI/Grammar", Title = "AI grammar suggestion", Explanation = "The local AI suggests this wording. Review the change before applying it." });
+        }
+        return cancellationToken.IsCancellationRequested ? new() : issues;
+    }
+
     /// Up to `count` versions: AI when available, otherwise one rule-based version.
     public static async Task<List<string>> Versions(string text, RewriteMode mode, string? custom = null, int count = 3, CheckOptions? options = null, CancellationToken cancellationToken = default, bool varied = false)
     {

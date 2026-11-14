@@ -133,6 +133,10 @@ struct MenuBarContent: View {
                 if let until = everywhere.pausedUntil { Text("⏸ Paused until \(until.formatted(date: .omitted, time: .shortened))") }
                 else { Text("✓ Checking as you type in every app") }
                 if !everywhere.currentApp.isEmpty { Text("\(everywhere.currentApp): \(everywhere.issueCount) suggestion\(everywhere.issueCount == 1 ? "" : "s")") }
+                Text(everywhere.fieldStatus)
+                if store.prefs.aiEverywhere {
+                    Text(everywhere.aiWorking ? "AI is reviewing your writing…" : AIEngine.available ? "On-device AI suggestions are enabled" : AIEngine.unavailableReason)
+                }
                 if let error = everywhere.editError { Text(error) }
             }
         }

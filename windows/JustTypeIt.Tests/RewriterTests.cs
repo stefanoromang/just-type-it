@@ -51,6 +51,8 @@ public class RewriterTests
         Assert.Empty(await Rewriter.Versions("", RewriteMode.Spanish));
         Assert.Empty(await Rewriter.Versions(new string('x', 6001), RewriteMode.Spanish));
         Assert.Empty(await Rewriter.Versions(Messy, RewriteMode.Spanish, cancellationToken: new CancellationToken(true)));
+        Assert.Empty(await Rewriter.Proofread(new string('x', 6001), new CheckOptions()));
+        Assert.Empty(await Rewriter.Proofread(Messy, new CheckOptions(), new CancellationToken(true)));
     }
 
     [Fact]
@@ -70,6 +72,7 @@ public class RewriterTests
     [Theory]
     [InlineData(RewriteMode.Spanish, "Please send order A729 for 24 boxes.", "Por favor, envía el pedido A729 de 24 cajas.", "Spanish")]
     [InlineData(RewriteMode.English, "Por favor, envía el pedido A729 de 24 cajas.", "Please send order A729 for 24 boxes.", "English")]
+    [InlineData(RewriteMode.GrammarOnly, "The team have sent order A729 yesterday.", "The team sent order A729 yesterday.", "English")]
     public async Task TranslationFlowsThroughLocalAI(RewriteMode mode, string source, string translated, string language)
     {
         var portProbe = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
@@ -103,13 +106,23 @@ public class RewriterTests
         });
         try
         {
-            var versions = await Rewriter.Versions(source, mode, count: 1);
+            var versions = mode == RewriteMode.GrammarOnly
+                ? (await Rewriter.Proofread(source, new CheckOptions())).Select(i => i.Replacements[0]).ToList()
+                : await Rewriter.Versions(source, mode, count: 1);
             await serve;
             Assert.Equal(translated, Assert.Single(versions));
             using var parsed = System.Text.Json.JsonDocument.Parse(request);
             var instruction = parsed.RootElement.GetProperty("messages")[0].GetProperty("content").GetString()!;
-            Assert.Contains("ONLY in " + language, instruction);
-            Assert.DoesNotContain("never translate", instruction);
+            if (mode == RewriteMode.GrammarOnly)
+            {
+                Assert.Contains("Proofread this English sentence", instruction);
+                Assert.Contains("Never translate", instruction);
+            }
+            else
+            {
+                Assert.Contains("ONLY in " + language, instruction);
+                Assert.DoesNotContain("never translate", instruction);
+            }
         }
         finally { Rewriter.OllamaUrl = previous; server.Stop(); }
     }

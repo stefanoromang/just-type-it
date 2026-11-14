@@ -38,6 +38,7 @@ final class Everywhere: ObservableObject {
     private var checkSettings = ""
     private var layoutSignature = ""
     @Published private(set) var aiWorking = false
+    @Published private(set) var fieldStatus = "Waiting for an editable text field"
     @Published var pausedUntil: Date?
     @Published private(set) var editError: String?
     private var applyingCorrection = false
@@ -123,7 +124,7 @@ final class Everywhere: ObservableObject {
 
     private func tick() {
         guard !applyingCorrection else { return }
-        guard AXIsProcessTrusted() else { hideAll(); return }
+        guard AXIsProcessTrusted() else { fieldStatus = "Accessibility permission is needed"; hideAll(); return }
         if let until = pausedUntil {
             if Date() < until { hideAll(); return }
             pausedUntil = nil
@@ -145,7 +146,7 @@ final class Everywhere: ObservableObject {
             aiIssues = []
             aiTask?.cancel()
         }
-        if Everywhere.defaultExcluded.contains(bid) || prefs.excludedApps.contains(bid) { hideAll(); currentApp = app.localizedName ?? ""; return }
+        if Everywhere.defaultExcluded.contains(bid) || prefs.excludedApps.contains(bid) { fieldStatus = "Checking is excluded or paused in this app"; hideAll(); currentApp = app.localizedName ?? ""; return }
         let axApp = AXUIElementCreateApplication(app.processIdentifier)
         if !enhancedPIDs.contains(app.processIdentifier) {
             // Chromium and Electron apps (Chrome, Edge, Slack, Teams, Notion…) only expose web text when asked.
@@ -156,9 +157,11 @@ final class Everywhere: ObservableObject {
             enhancedPIDs.insert(app.processIdentifier)
         }
         AXUIElementSetMessagingTimeout(axApp, 0.25)
-        guard let el = FocusedEditor.resolve(app: axApp, pid: app.processIdentifier, bundleID: bid) else { hideAll(); element = nil; return }
         currentApp = app.localizedName ?? ""
+        guard let el = FocusedEditor.resolve(app: axApp, pid: app.processIdentifier, bundleID: bid) else { fieldStatus = "This field is protected or does not expose editable text"; hideAll(); element = nil; return }
+        fieldStatus = "Watching the focused text field"
         if element == nil || !CFEqual(el, element!) || pid != app.processIdentifier {
+            hideAll()
             element = el
             pid = app.processIdentifier
             bundleID = bid
@@ -171,7 +174,7 @@ final class Everywhere: ObservableObject {
             lastAIRequest = ""
             card.orderOut(nil)
         }
-        guard let full = string(el, kAXValueAttribute) else { hideAll(); return }
+        guard let full = string(el, kAXValueAttribute) else { fieldStatus = "This editor does not expose its text"; hideAll(); return }
         if full != lastText {
             let grew = (full as NSString).length > (lastText as NSString).length
             lastText = full
@@ -250,7 +253,7 @@ final class Everywhere: ObservableObject {
         lastAIRequest = full
         let caret = selectedRange(el)?.location ?? (full as NSString).length
         aiTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
             guard let self, !Task.isCancelled, self.lastText == full else { return }
             let paras = TextUtil.paragraphs(full)
             // Paragraph at the cursor first, then the rest of what's visible (up to 4 paragraphs).
@@ -385,11 +388,7 @@ final class Everywhere: ObservableObject {
     }
 
     private func bounds(_ el: AXUIElement, _ range: NSRange) -> NSRect? {
-        var r = CFRange(location: range.location, length: range.length)
-        guard let v = AXValueCreate(.cfRange, &r) else { return nil }
-        var out: CFTypeRef?
-        guard AXUIElementCopyParameterizedAttributeValue(el, kAXBoundsForRangeParameterizedAttribute as CFString, v, &out) == .success,
-              let rect = Everywhere.axRect(out), rect.width > 0 || rect.height > 0 else { return nil }
+        guard let rect = FocusedEditor.bounds(el, range: range) else { return nil }
         return toCocoa(rect)
     }
 
@@ -612,7 +611,7 @@ final class OverlayWindow: NSWindow {
         hasShadow = false
         ignoresMouseEvents = true
         level = .floating
-        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        collectionBehavior = [.canJoinAllSpaces, .canJoinAllApplications, .fullScreenAuxiliary, .ignoresCycle]
         isReleasedWhenClosed = false
         contentView = canvas
     }
@@ -621,7 +620,7 @@ final class OverlayWindow: NSWindow {
         if self.frame != frame { setFrame(frame, display: false) }
         canvas.marks = marks.map { m in (m.0, m.1.map { NSRect(x: $0.minX - frame.minX, y: $0.minY - frame.minY, width: $0.width, height: $0.height) }, m.2) }
         canvas.needsDisplay = true
-        if !isVisible { orderFrontRegardless() }
+        if !isVisible || !isOnActiveSpace || !occlusionState.contains(.visible) { orderFrontRegardless() }
     }
 }
 
@@ -657,7 +656,7 @@ class FloatingPanel: NSPanel {
         backgroundColor = .clear
         hasShadow = true
         level = .popUpMenu
-        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+        collectionBehavior = [.canJoinAllSpaces, .canJoinAllApplications, .fullScreenAuxiliary, .ignoresCycle]
         isReleasedWhenClosed = false
         hidesOnDeactivate = false
         becomesKeyOnlyIfNeeded = true
@@ -680,7 +679,15 @@ final class BadgePanel: FloatingPanel {
         let size: CGFloat = 26
         let width: CGFloat = tone == nil ? size : size * 2 + 2
         var origin = NSPoint(x: frame.maxX - width - 6, y: frame.minY + 6)
-        if frame.height > 400 { origin.y = max(frame.minY + 6, frame.minY + 6) }
+        let area: (NSScreen) -> CGFloat = { screen in
+            let intersection = screen.visibleFrame.intersection(frame)
+            return intersection.isNull ? 0 : intersection.width * intersection.height
+        }
+        if let screen = NSScreen.screens.max(by: { area($0) < area($1) }) {
+            let visible = screen.visibleFrame
+            origin.x = min(max(origin.x, visible.minX + 6), visible.maxX - width - 6)
+            origin.y = min(max(origin.y, visible.minY + 6), visible.maxY - size - 6)
+        }
         if count != self.count || worst != group || tone != self.tone {
             self.count = count
             group = worst
@@ -693,7 +700,7 @@ final class BadgePanel: FloatingPanel {
         }
         let f = NSRect(origin: origin, size: NSSize(width: width, height: size))
         if self.frame != f { setFrame(f, display: true) }
-        if !isVisible { orderFrontRegardless() }
+        if !isVisible || !isOnActiveSpace || !occlusionState.contains(.visible) { orderFrontRegardless() }
     }
 }
 
@@ -770,6 +777,7 @@ struct EverywhereCard: View {
             HStack(spacing: 6) {
                 Circle().fill(issue.group.color).frame(width: 8, height: 8)
                 Text(issue.group.label.uppercased()).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                if issue.source == .ai { Label("AI", systemImage: "sparkles").font(.caption2).foregroundStyle(.purple) }
                 Text("·").foregroundStyle(.secondary)
                 Text(issue.title).font(.caption.weight(.semibold))
                 Spacer()

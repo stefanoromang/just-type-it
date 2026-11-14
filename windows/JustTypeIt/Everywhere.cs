@@ -30,6 +30,12 @@ public sealed class Everywhere : IDisposable
     Rectangle measuredBounds;
     DateTime measuredAt;
     string checkSettings = "";
+    CancellationTokenSource? aiCts;
+    string lastAIText = "";
+    string aiText = "";
+    List<Issue> aiIssues = new();
+    DateTime aiRetryAfter;
+    public bool AIWorking { get; private set; }
     public string CurrentApp { get; private set; } = "";
     public int IssueCount => issues.Count;
     public bool Running => timer.Enabled;
@@ -49,11 +55,12 @@ public sealed class Everywhere : IDisposable
     }
 
     public void Start() { timer.Start(); }
-    public void Stop() { timer.Stop(); autocorrectCts?.Cancel(); checkedText = null; HideAll(); }
+    public void Stop() { timer.Stop(); autocorrectCts?.Cancel(); aiCts?.Cancel(); lastAIText = ""; checkedText = null; HideAll(); }
     public void Dispose() { timer.Dispose(); overlay.Dispose(); badge.Dispose(); }
 
     void HideAll()
     {
+        aiCts?.Cancel(); lastAIText = ""; AIWorking = false; checkedText = null;
         overlay.Hide(); badge.Hide(); SummaryWindow.CloseOpen();
         marks.Clear(); measuredFor = "";
         if (issues.Count != 0) { issues = new(); Changed?.Invoke(); }
@@ -69,8 +76,8 @@ public sealed class Everywhere : IDisposable
         try
         {
             var prefs = Store.Shared.Prefs;
-            var settings = $"{string.Join(',', prefs.Languages)}|{prefs.Dialect}|{string.Join(',', prefs.Dictionary)}|{prefs.Passive}|{prefs.Hedging}|{prefs.Inclusive}";
-            if (settings != checkSettings) { checkSettings = settings; checkedText = null; issues.Clear(); marks.Clear(); measuredFor = ""; }
+            var settings = $"{string.Join(',', prefs.Languages)}|{prefs.Dialect}|{string.Join(',', prefs.Dictionary)}|{prefs.Passive}|{prefs.Hedging}|{prefs.Inclusive}|{prefs.AIEverywhere}";
+            if (settings != checkSettings) { checkSettings = settings; checkedText = null; issues.Clear(); marks.Clear(); measuredFor = ""; aiIssues.Clear(); aiCts?.Cancel(); lastAIText = ""; }
             if (PausedUntil is { } until) { if (DateTime.Now < until) { HideAll(); return; } PausedUntil = null; }
             var hwnd = GetForegroundWindow();
             GetWindowThreadProcessId(hwnd, out var pid);
@@ -89,6 +96,7 @@ public sealed class Everywhere : IDisposable
             if (element == null || !Automation.Compare(el, element))
             {
                 element = el; elementPid = (int)pid; lastText = ""; checkedText = null; autocorrected.Clear(); dismissedCard();
+                aiCts?.Cancel(); aiIssues.Clear(); lastAIText = "";
                 issues = new(); marks = new(); measuredFor = ""; overlay.Hide(); SummaryWindow.CloseOpen();
             }
             CurrentApp = FriendlyName(proc);
@@ -96,8 +104,11 @@ public sealed class Everywhere : IDisposable
             {
                 bool grew = text.Length > lastText.Length;
                 lastText = text; lastChange = DateTime.Now; overlay.HideCard();
+                aiCts?.Cancel(); lastAIText = "";
                 if (grew && Store.Shared.Prefs.Autocorrect) ScheduleAutocorrect(el, text);
             }
+            if (Store.Shared.Prefs.AIEverywhere && (DateTime.Now - lastChange).TotalSeconds > 2 && lastAIText != text && DateTime.UtcNow >= aiRetryAfter)
+                ScheduleAI(el, text, Store.Shared.Options(GoalsFor(proc)));
             if (checkedText != text && (DateTime.Now - lastChange).TotalMilliseconds > 200)
             {
                 checkedText = text;
@@ -106,6 +117,8 @@ public sealed class Everywhere : IDisposable
                 var found = await Task.Run(() => RuleEngine.Check(text.Length > 20000 ? text[..20000] : text, opts));
                 if (!Running || checkedText != lastText || InputHelper.ForegroundProcessId() != pid) return;
                 issues = found.Where(i => !dismissed.Contains(i.Key) && i.Kind is not "Engagement/Repetition" and not "Style/Clarity/LongSentence").ToList();
+                if (aiText == text) issues.AddRange(aiIssues.Where(i => !dismissed.Contains(i.Key)));
+                ScheduleAI(el, text, opts);
                 Changed?.Invoke();
             }
             var tone = Store.Shared.Prefs.ShowTone && Languages.Detect(text, Store.Shared.Prefs.Languages) == "en" ? Proactive.ToneEmoji(text) : null;
@@ -127,6 +140,37 @@ public sealed class Everywhere : IDisposable
         }
         catch { }
         finally { busy = false; }
+    }
+
+    void ScheduleAI(AutomationElement el, string full, CheckOptions options)
+    {
+        if (!Store.Shared.Prefs.AIEverywhere || full == lastAIText || DateTime.UtcNow < aiRetryAfter) return;
+        aiCts?.Cancel();
+        var cts = aiCts = new CancellationTokenSource();
+        lastAIText = full;
+        _ = RunAI();
+        async Task RunAI()
+        {
+            try
+            {
+                await Task.Delay(1200, cts.Token);
+                if (!Running || lastText != full || cts.IsCancellationRequested) return;
+                if (await Rewriter.AvailableModel() == null) { if (!cts.IsCancellationRequested) { aiRetryAfter = DateTime.UtcNow.AddSeconds(30); lastAIText = ""; } return; }
+                var caret = await Task.Run(() => Caret(el, full));
+                var paragraph = TextUtil.Paragraphs(full).OrderBy(p => caret >= p.Start && caret <= p.End ? 0 : Math.Abs(p.Start - Math.Max(0, caret)) + 1).FirstOrDefault();
+                if (paragraph.Text == null || paragraph.Length > 6000 || cts.IsCancellationRequested) return;
+                AIWorking = true;
+                var found = await Rewriter.Proofread(paragraph.Text, options, cts.Token);
+                if (cts.IsCancellationRequested || !Running || lastText != full || element == null || !Automation.Compare(element, el)) return;
+                aiIssues = found;
+                foreach (var issue in aiIssues) issue.Start += paragraph.Start;
+                aiText = full;
+                checkedText = null;
+            }
+            catch (OperationCanceledException) { }
+            catch { }
+            finally { if (ReferenceEquals(aiCts, cts)) AIWorking = false; }
+        }
     }
 
     void dismissedCard() => overlay.HideCard();
@@ -161,7 +205,7 @@ public sealed class Everywhere : IDisposable
             var ct = c.ControlType;
             if (ct != ControlType.Edit && ct != ControlType.Document && ct != ControlType.Custom && ct != ControlType.Group && ct != ControlType.Pane) return null;
             var name = (c.Name + " " + c.AutomationId + " " + c.HelpText).ToLowerInvariant();
-            if (ct == ControlType.Edit && new[] { "search", "address", "url", "password", "find", "recipient", "to:", "cc:", "bcc" }.Any(name.Contains)) return null;
+            if (ct == ControlType.Edit && IsProtectedField(name)) return null;
             if (f.TryGetCurrentPattern(ValuePattern.Pattern, out var vp) && ((ValuePattern)vp).Current.IsReadOnly) return null;
             string? text = null;
             if (f.TryGetCurrentPattern(TextPattern.Pattern, out var tp))
@@ -177,6 +221,9 @@ public sealed class Everywhere : IDisposable
         }
         catch { return null; }
     }
+
+    internal static bool IsProtectedField(string label) =>
+        new[] { "address", "url", "password", "omnibox", "location bar", "recipient", "to:", "cc:", "bcc" }.Any(label.ToLowerInvariant().Contains);
 
     static bool SameWindowTree(AutomationElement el, int pid)
     {

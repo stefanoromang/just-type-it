@@ -82,6 +82,9 @@ sealed class TrayApp : ApplicationContext
             if (everywhere.Checked) Everywhere.Shared.Start(); else Everywhere.Shared.Stop();
         };
         menu.Items.Add(everywhere);
+        var ai = new ToolStripMenuItem("AI suggestions in all apps (local Ollama)") { Checked = Store.Shared.Prefs.AIEverywhere, CheckOnClick = true };
+        ai.CheckedChanged += (_, _) => { Store.Shared.Prefs.AIEverywhere = ai.Checked; Store.Shared.Save(); };
+        menu.Items.Add(ai);
         var ac = new ToolStripMenuItem("Autocorrect obvious typos") { Checked = Store.Shared.Prefs.Autocorrect, CheckOnClick = true };
         ac.CheckedChanged += (_, _) => { Store.Shared.Prefs.Autocorrect = ac.Checked; Store.Shared.Save(); };
         menu.Items.Add(ac);
@@ -108,6 +111,7 @@ sealed class TrayApp : ApplicationContext
             status.Text = e.PausedUntil is { } u ? $"Paused until {u:t}"
                 : !e.Running ? "Checking in other apps is off"
                 : e.CurrentApp.Length > 0 ? $"{e.CurrentApp}: {e.IssueCount} suggestion{(e.IssueCount == 1 ? "" : "s")}" : "Checking as you type in every app";
+            if (e.AIWorking) status.Text += " · AI reviewing…";
         };
         tray.ContextMenuStrip = menu;
         tray.DoubleClick += (_, _) => ShowWindow();

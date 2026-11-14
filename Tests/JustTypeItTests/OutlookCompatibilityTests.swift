@@ -46,13 +46,16 @@ struct OutlookCompatibilityTests {
     }
 
     func testRecipientSearchAndSecureFieldsAreNotProofread() {
-        for label in ["To Recipients", "Cc Recipients", "Bcc Recipients", "Search", "Email Address", "URL", "Password"] {
+        for label in ["To Recipients", "Cc Recipients", "Bcc Recipients", "Email Address", "URL", "Password", "Address and search bar", "smart search field"] {
             XCTAssertFalse(FocusedEditor.isTextField(role: "AXTextField", subrole: "", description: label), label)
         }
         XCTAssertFalse(FocusedEditor.isTextField(role: "AXTextField", subrole: "AXSecureTextField", description: ""))
         XCTAssertFalse(FocusedEditor.isTextField(role: "AXWebArea", subrole: "", description: "reading pane"))
         XCTAssertTrue(FocusedEditor.isTextField(role: "AXTextArea", subrole: "", description: ""))
         XCTAssertTrue(FocusedEditor.isTextField(role: "AXTextField", subrole: "", description: "Subject"))
+        XCTAssertTrue(FocusedEditor.isTextField(role: "AXTextField", subrole: "", description: "Search"))
+        XCTAssertTrue(FocusedEditor.isTextField(role: "AXSearchField", subrole: "", description: "Search Google"))
+        XCTAssertTrue(FocusedEditor.isTextField(role: "AXComboBox", subrole: "", description: "Search"))
     }
 
     func testCorrectionPreservesSignatureAndUnicode() {

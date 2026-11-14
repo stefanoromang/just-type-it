@@ -20,6 +20,31 @@ enum FocusedEditor {
         attribute(element, name) as? String
     }
 
+    /// Chromium rich-text hosts sometimes return an empty range rect while their text child has it.
+    static func bounds(_ editor: AXUIElement, range: NSRange) -> CGRect? {
+        guard range.location != NSNotFound, range.location >= 0, range.length > 0 else { return nil }
+        var r = CFRange(location: range.location, length: range.length)
+        guard let value = AXValueCreate(.cfRange, &r) else { return nil }
+        func read(_ node: AXUIElement) -> CGRect? {
+            var raw: CFTypeRef?
+            guard AXUIElementCopyParameterizedAttributeValue(node, kAXBoundsForRangeParameterizedAttribute as CFString, value, &raw) == .success,
+                  let raw, CFGetTypeID(raw) == AXValueGetTypeID() else { return nil }
+            var rect = CGRect.zero
+            guard AXValueGetType(raw as! AXValue) == .cgRect, AXValueGetValue(raw as! AXValue, .cgRect, &rect),
+                  rect.height > 0, rect.width > 0 else { return nil }
+            return rect
+        }
+        if let rect = read(editor) { return rect }
+        guard let full = string(editor, kAXValueAttribute) else { return nil }
+        var result: CGRect?
+        _ = search(roots: children(editor), maxNodes: 80, maxDepth: 8, children: children) { node in
+            guard string(node, kAXValueAttribute) == full, let rect = read(node) else { return false }
+            result = rect
+            return true
+        }
+        return result
+    }
+
     static func element(_ source: AXUIElement, _ name: String) -> AXUIElement? {
         guard let value = attribute(source, name), CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
         return (value as! AXUIElement)
@@ -35,10 +60,10 @@ enum FocusedEditor {
 
     static func isTextField(role: String, subrole: String, description: String) -> Bool {
         guard role != "AXSecureTextField", subrole != "AXSecureTextField" else { return false }
-        guard ["AXTextArea", "AXTextField", "AXComboBox"].contains(role) else { return false }
+        guard ["AXTextArea", "AXTextField", "AXComboBox", "AXSearchField"].contains(role) else { return false }
         if role != "AXTextArea" {
             let label = description.lowercased()
-            if ["search", "address", "url", "password", "recipient", "find"].contains(where: label.contains) { return false }
+            if ["address", "url", "password", "recipient", "location bar", "omnibox", "smart search"].contains(where: label.contains) { return false }
         }
         return true
     }
@@ -81,6 +106,23 @@ enum FocusedEditor {
         // System focus can reach the WebKit child even if Outlook's app-level focus is nil.
         let systemFocus = element(AXUIElementCreateSystemWide(), kAXFocusedUIElementAttribute)
         if let focus = systemFocus, isTextField(focus), belongsToApp(focus, pid: pid) { return focus }
+        // A deliberately excluded focused control must never fall through to another editable ancestor.
+        for focus in [systemFocus, nativeFocus].compactMap({ $0 }) where belongsToApp(focus, pid: pid) {
+            let role = string(focus, kAXRoleAttribute) ?? ""
+            if ["AXTextArea", "AXTextField", "AXComboBox", "AXSearchField", "AXSecureTextField"].contains(role) { return nil }
+        }
+        // Word and browser editors can focus a paragraph/static-text child rather than its editor.
+        // Only follow the focus's ancestry; never scan for an unrelated draft in another field.
+        for focus in [systemFocus, nativeFocus].compactMap({ $0 }) where belongsToApp(focus, pid: pid) {
+            if string(focus, kAXSubroleAttribute) == "AXSecureTextField" || string(focus, kAXRoleAttribute) == "AXSecureTextField" { return nil }
+            var parent = element(focus, "AXEditableAncestor") ?? element(focus, kAXParentAttribute)
+            var visited = Set<AXUIElement>()
+            while let node = parent, visited.count < 8, visited.insert(node).inserted {
+                if isTextField(node), belongsToApp(node, pid: pid) { return node }
+                if ["AXWindow", "AXWebArea", "AXApplication"].contains(string(node, kAXRoleAttribute) ?? "") { break }
+                parent = element(node, kAXParentAttribute)
+            }
+        }
         guard bundleID == outlookID else { return nil }
 
         // Outlook sometimes focuses a paragraph or its native "Editor" host instead of the text area.

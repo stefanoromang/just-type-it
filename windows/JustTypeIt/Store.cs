@@ -14,6 +14,7 @@ public sealed class Prefs
     public List<string> Dictionary { get; set; } = new();
     public List<StyleRule> StyleRules { get; set; } = new();
     public bool CheckEverywhere { get; set; } = true;
+    public bool AIEverywhere { get; set; } = true;
     public bool StartWithWindows { get; set; } = true;
     public bool Passive { get; set; } = true;
     public bool Hedging { get; set; } = true;
